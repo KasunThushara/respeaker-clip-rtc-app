@@ -1,0 +1,6 @@
+{
+  "name": "clip-live-stream",
+  "private": true,
+  "type": "module",
+  "description": "Web app to control the reSpeaker Clip with VAD-triggered Groq transcription. Run: node server.js"
+}
