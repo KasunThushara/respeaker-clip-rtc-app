@@ -1,0 +1,130 @@
+name: release
+
+# Tag-triggered release. Pushing a vX.Y.Z tag builds the debug + production
+# firmware, exports the 8 release artifacts, and publishes a GitHub Release
+# whose body is docs/release_notes/vX.Y.Z.md. Plain branch pushes / PRs only
+# run the compile check in firmware.yml.
+#
+# Version is derived from the tag (GITHUB_REF_NAME), so the release notes file
+# must exist at docs/release_notes/<tag>.md (e.g. tag v0.0.10 -> v0.0.10.md) and
+# applications/clip/VERSION should match before tagging.
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write   # create the GitHub Release and upload assets
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false   # never cancel a release mid-publish
+
+jobs:
+  release:
+    name: Build + publish release (NCS v3.3.0)
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout this module
+        uses: actions/checkout@v4
+        with:
+          path: respeaker_clip
+
+      - name: Resolve version from tag
+        id: ver
+        run: |
+          TAG="${GITHUB_REF_NAME}"        # e.g. v0.0.10
+          VER="${TAG#v}"                  # 0.0.10
+          echo "tag=$TAG"     >> "$GITHUB_OUTPUT"
+          echo "version=$VER" >> "$GITHUB_OUTPUT"
+          echo "Release tag=$TAG version=$VER"
+
+      - name: Verify release notes exist
+        run: |
+          f="respeaker_clip/docs/release_notes/${{ steps.ver.outputs.tag }}.md"
+          if [ ! -f "$f" ]; then
+            echo "::error::release notes not found: $f (add it before pushing the tag)"
+            exit 1
+          fi
+          echo "Using release notes: $f"
+
+      - name: Install host build dependencies + west
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            ccache cmake device-tree-compiler dfu-util file g++-multilib \
+            gcc gcc-multilib git gperf make ninja-build python3-dev python3-pip \
+            python3-setuptools python3-venv python3-wheel wget xz-utils \
+            libsdl2-dev libmagic1
+          pip3 install west
+
+      - name: Install Zephyr SDK 0.17.0 (arm / Cortex-M only)
+        run: |
+          wget -q --tries=3 --retry-connrefused --waitretry=5 \
+            https://github.com/zephyrproject-rtos/sdk-ng/releases/download/v0.17.0/zephyr-sdk-0.17.0_linux-x86_64_minimal.tar.xz
+          tar xf zephyr-sdk-0.17.0_linux-x86_64_minimal.tar.xz -C "$HOME"
+          "$HOME/zephyr-sdk-0.17.0/setup.sh" -c -t arm-zephyr-eabi
+
+      - name: Initialize NCS v3.3.0 workspace
+        run: |
+          west init -m https://github.com/nrfconnect/sdk-nrf --mr v3.3.0 ncs
+          cd ncs
+          west update --narrow -o=--depth=1
+          # requirements-BASE (not full) to avoid spsdk -> pip setuptools_scm
+          # backtracking hang; nrf requirements for image-signing deps.
+          pip3 install -r zephyr/scripts/requirements-base.txt -r nrf/scripts/requirements.txt
+
+      - name: Apply MCUboot patches (idempotent)
+        run: |
+          cd ncs/bootloader/mcuboot
+          shopt -s nullglob
+          for p in "$GITHUB_WORKSPACE"/respeaker_clip/patches/mcuboot/0*.patch; do
+            if git apply --check "$p" 2>/dev/null; then
+              echo "applying $(basename "$p")"; git apply "$p"
+            else
+              echo "skip (already applied): $(basename "$p")"
+            fi
+          done
+
+      - name: Build debug + production
+        run: |
+          cd ncs
+          export ZEPHYR_EXTRA_MODULES="$GITHUB_WORKSPACE/respeaker_clip"
+          APP="$GITHUB_WORKSPACE/respeaker_clip/applications/clip"
+          # Debug (console on)
+          west build -b clip/nrf5340/cpuapp "$APP" --build-dir build-clip --pristine=always
+          # Production (console off, low-power, pairing locked)
+          west build -b clip/nrf5340/cpuapp "$APP" --build-dir build-clip-prod --pristine=always \
+            -- -DSNIPPET_ROOT="$APP" -DSNIPPET=production
+
+      - name: Export release artifacts
+        run: |
+          cd ncs
+          VER="${{ steps.ver.outputs.version }}"
+          OUT="$GITHUB_WORKSPACE/output/$VER"
+          mkdir -p "$OUT"
+          cp build-clip/merged.hex                       "$OUT/clip-$VER-debug-merged.hex"
+          cp build-clip/merged_CPUNET.hex                "$OUT/clip-$VER-debug-merged_CPUNET.hex"
+          cp build-clip/dfu_application.zip              "$OUT/clip-$VER-debug-ota.zip"
+          cp build-clip/clip/zephyr/zephyr.signed.bin    "$OUT/clip-$VER-debug-signed.bin"
+          cp build-clip-prod/merged.hex                  "$OUT/clip-$VER-production-merged.hex"
+          cp build-clip-prod/merged_CPUNET.hex           "$OUT/clip-$VER-production-merged_CPUNET.hex"
+          cp build-clip-prod/dfu_application.zip          "$OUT/clip-$VER-production-ota.zip"
+          cp build-clip-prod/clip/zephyr/zephyr.signed.bin "$OUT/clip-$VER-production-signed.bin"
+          echo "=== release artifacts ($VER) ==="
+          ls -la "$OUT"
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ steps.ver.outputs.tag }}"
+          VER="${{ steps.ver.outputs.version }}"
+          gh release create "$TAG" "output/$VER"/* \
+            --title "$TAG" \
+            --notes-file "respeaker_clip/docs/release_notes/$TAG.md" \
+            --prerelease
+          # No --verify-tag: it shells out to git, but the Actions workspace
+          # root isn't a git repo (the checkout lives under respeaker_clip/).
+          # The tag is guaranteed to exist — this workflow only runs on tag push.

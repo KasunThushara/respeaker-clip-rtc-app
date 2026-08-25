@@ -1,0 +1,74 @@
+name: mobile-verify
+
+# Full clean-checkout build for the mobile SDKs — debug APK (Flutter),
+# assembleDebug (Android), Swift build + iOS sample build + no-hardware smoke.
+# Runs on push to main and manually; heavier than mobile-ci.yml so it is not
+# gated on every PR. Full BLE / Wi-Fi / OTA validation still needs a phone +
+# Clip device; see mobile/docs/native-sdk-verification.md.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: mobile-verify-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  flutter:
+    name: Flutter build APK
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Example — build debug APK
+        working-directory: mobile/sdk/flutter/example
+        run: |
+          flutter pub get
+          flutter build apk --debug
+
+  android:
+    name: Android assembleDebug
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - name: Build sample
+        working-directory: mobile/sdk/android
+        run: ./gradlew :sample:assembleDebug --no-daemon
+
+  ios:
+    name: iOS build + smoke
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Swift build + test
+        working-directory: mobile/sdk/ios
+        run: |
+          swift build
+          swift test
+      - name: No-hardware verification smoke
+        working-directory: mobile/sdk/ios
+        run: swift run SenseCraftVoiceVerifyCLI smoke
+      - name: Build iOS sample (no signing)
+        working-directory: mobile/sdk/ios
+        run: >
+          xcodebuild
+          -project Examples/iOSVerifyApp/SenseCraftVoiceVerifyApp.xcodeproj
+          -scheme SenseCraftVoiceVerifyApp
+          -sdk iphonesimulator
+          -configuration Debug
+          CODE_SIGNING_ALLOWED=NO
+          build

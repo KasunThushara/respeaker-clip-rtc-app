@@ -1,0 +1,114 @@
+{
+  "sample_rate": 16000,
+  "distances": [
+    0.5,
+    1,
+    2,
+    3
+  ],
+  "move_time_sec": 15,
+  "corpus_files": [
+    "full_zh.wav",
+    "full_en.wav",
+    "full_digits.wav"
+  ],
+  "segments": [
+    {
+      "distance_m": 0.5,
+      "start_sec": 3.0,
+      "prompt_beeps": 1,
+      "corpus_segments": [
+        {
+          "file": "full_zh.wav",
+          "start_sec": 3.0,
+          "duration_sec": 127.8
+        },
+        {
+          "file": "full_en.wav",
+          "start_sec": 132.8,
+          "duration_sec": 103.3
+        },
+        {
+          "file": "full_digits.wav",
+          "start_sec": 238.1,
+          "duration_sec": 45.0
+        }
+      ],
+      "end_sec": 283.1,
+      "duration_sec": 280.1
+    },
+    {
+      "distance_m": 1,
+      "start_sec": 299.6,
+      "prompt_beeps": 2,
+      "corpus_segments": [
+        {
+          "file": "full_zh.wav",
+          "start_sec": 299.6,
+          "duration_sec": 127.8
+        },
+        {
+          "file": "full_en.wav",
+          "start_sec": 429.5,
+          "duration_sec": 103.3
+        },
+        {
+          "file": "full_digits.wav",
+          "start_sec": 534.7,
+          "duration_sec": 45.0
+        }
+      ],
+      "end_sec": 579.7,
+      "duration_sec": 280.1
+    },
+    {
+      "distance_m": 2,
+      "start_sec": 597.0,
+      "prompt_beeps": 4,
+      "corpus_segments": [
+        {
+          "file": "full_zh.wav",
+          "start_sec": 597.0,
+          "duration_sec": 127.8
+        },
+        {
+          "file": "full_en.wav",
+          "start_sec": 726.8,
+          "duration_sec": 103.3
+        },
+        {
+          "file": "full_digits.wav",
+          "start_sec": 832.1,
+          "duration_sec": 45.0
+        }
+      ],
+      "end_sec": 877.1,
+      "duration_sec": 280.1
+    },
+    {
+      "distance_m": 3,
+      "start_sec": 895.0,
+      "prompt_beeps": 6,
+      "corpus_segments": [
+        {
+          "file": "full_zh.wav",
+          "start_sec": 895.0,
+          "duration_sec": 127.8
+        },
+        {
+          "file": "full_en.wav",
+          "start_sec": 1024.8,
+          "duration_sec": 103.3
+        },
+        {
+          "file": "full_digits.wav",
+          "start_sec": 1130.1,
+          "duration_sec": 45.0
+        }
+      ],
+      "end_sec": 1175.1,
+      "duration_sec": 280.1
+    }
+  ],
+  "total_duration_sec": 1175.1
+}

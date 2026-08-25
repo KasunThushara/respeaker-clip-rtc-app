@@ -1,0 +1,387 @@
+/dts-v1/;
+#include <nordic/nrf5340_cpuapp_qkaa.dtsi>
+#include "clip-pinctrl.dtsi"
+#include <zephyr/dt-bindings/sensor/lsm6dso.h>
+#include <dt-bindings/regulator/npm13xx.h>
+
+&uicr {
+	nfct-pins-as-gpios;
+};
+
+/ {
+	model = "Clip (CPUAPP)";
+	compatible = "seeed,clip-cpuapp";
+
+	usr_btn: button {
+		compatible = "gpio-button";
+		gpios = <&gpio1 15 (GPIO_PULL_UP | GPIO_ACTIVE_LOW)>;
+		label = "USR";
+		debounce-ms = <30>;
+		long-press-ms = <1000 3000>;
+		double-click-ms = <200>;
+		status = "okay";
+	};
+
+	/* Microphone power - alias to npm1300 LDO1 (1.8V), controlled by audio.c */
+
+	/* SD card power - NPM1300 LDO2 (3.3V) via PMIC GPIO3 */
+
+	oled_reg: regulator-oled {
+		compatible = "regulator-fixed";
+		regulator-name = "oled_vdd";
+		enable-gpios = <&gpio1 8 GPIO_ACTIVE_HIGH>;
+		regulator-boot-on;
+		status = "okay";
+	};
+
+	/* WiFi RF switch regulator */
+	rfsw_reg: regulator-rfsw {
+		compatible = "regulator-fixed";
+		regulator-name = "rfsw_vdd";
+		regulator-always-on;
+		enable-gpios = <&gpio0 29 GPIO_ACTIVE_HIGH>;
+		status = "okay";
+	};
+
+	/* SPI flash power (P0.27), dip switch on Lav, power button on next rev */
+	flash_vdd: regulator-flash {
+		compatible = "regulator-fixed";
+		regulator-name = "flash_vdd";
+		regulator-boot-on;
+		enable-gpios = <&gpio0 27 GPIO_ACTIVE_HIGH>;
+		status = "okay";
+	};
+
+
+	chosen {
+		zephyr,sram = &sram0_image;
+		zephyr,flash = &flash0;
+		zephyr,code-partition = &slot0_partition;
+		zephyr,sram-secure-partition = &sram0_s;
+		zephyr,sram-non-secure-partition = &sram0_ns;
+		zephyr,console = &uart0;
+		zephyr,shell-uart = &uart0;
+		zephyr,bt-hci = &bt_hci_ipc0;
+		nordic,802154-spinel-ipc = &ipc0;
+		zephyr,ieee802154 = &ieee802154;
+		zephyr,wifi = &wlan0;
+		nordic,pm-ext-flash = &spi_flash;
+		zephyr,display = &ch1115;
+		zephyr,boot-mode = &boot_mode0;
+	};
+	aliases {
+		dmic0 = &pdm0;
+		sw0 = &usr_btn;
+	};
+
+	nrf_radio_coex: coex {
+		status = "okay";
+		compatible = "nordic,nrf7002-coex";
+		req-gpios = <&gpio0 28 GPIO_ACTIVE_HIGH>;
+		status0-gpios = <&gpio0 25 GPIO_ACTIVE_HIGH>;
+		grant-gpios = <&gpio0 31 (GPIO_PULL_DOWN | GPIO_ACTIVE_LOW)>;
+		swctrl1-gpios = <&gpio0 30 GPIO_ACTIVE_HIGH>;
+	};
+};
+
+&gpiote {
+	status = "okay";
+};
+
+&gpio0 {
+	status = "okay";
+};
+
+&gpio1 {
+	status = "okay";
+};
+
+&gpiote {
+	status = "okay";
+};
+
+&uart0 {
+	status = "okay";
+	current-speed = <921600>;
+	pinctrl-0 = <&uart0_default>;
+	pinctrl-1 = <&uart0_sleep>;
+	pinctrl-names = "default", "sleep";
+};
+
+&adc {
+	status = "okay";
+};
+
+&usbd {
+	status = "okay";
+
+	cdc_acm_uart: cdc_acm_uart {
+		compatible = "zephyr,cdc-acm-uart";
+	};
+};
+
+&clock {
+	hfclkaudio-frequency = <12288000>;
+};
+
+/* Switch the nRF5340 internal regulators from the SDK default LDO to DCDC.
+ * The Clip board has the 10µH DCDC inductors (L1, L2) populated; in LDO mode
+ * the suspend/idle current is ~500-600µA higher. Matches the nRF5340+nRF7022
+ * reference (nrf7002dk) and samples/suspend_to_ram. */
+&vregmain {
+	regulator-initial-mode = <NRF5X_REG_MODE_DCDC>;
+};
+
+&vregradio {
+	regulator-initial-mode = <NRF5X_REG_MODE_DCDC>;
+};
+
+&pdm0 {
+	status = "okay";
+	pinctrl-0 = <&pdm0_default>;
+	pinctrl-names = "default";
+	clock-source = "PCLK32M_HFXO";
+	queue-size = <32>;
+};
+
+&i2c1 {
+	status = "okay";
+	pinctrl-0 = <&i2c1_default>;
+	pinctrl-1 = <&i2c1_sleep>;
+	pinctrl-names = "default", "sleep";
+
+	npm1300: pmic@6b {
+		compatible = "nordic,npm1300";
+		reg = <0x6b>;
+		status = "okay";
+		/* Long press 3s to wake from hibernate mode */
+		ship-to-active-time-ms = <1008>;
+		/* NPM1300 GPIO1 → gpio0.10 for interrupt (GPOIRQ mode) */
+		host-int-gpios = <&gpio0 10 GPIO_ACTIVE_HIGH>;
+		pmic-int-pin = <1>;
+
+		npm1300_gpio: gpio-controller {
+			compatible = "nordic,npm1300-gpio";
+			gpio-controller;
+			#gpio-cells = <2>;
+			ngpios = <5>;
+			status = "okay";
+		};
+
+		npm1300_regulators: regulators {
+			compatible = "nordic,npm1300-regulator";
+
+			/* BUCK1: MOTOR_3V3 - Vibration motor power */
+			npm1300_buck1: BUCK1 {
+				regulator-min-microvolt = <3300000>;
+				regulator-max-microvolt = <3300000>;
+				regulator-init-microvolt = <3300000>;
+				enable-gpio-config = <NPM13XX_GPIO_CHAN_1 GPIO_ACTIVE_HIGH>;
+				/* Motor controlled by P1.06 via PMIC GPIO1 */
+			};
+
+			/* BUCK2: VDD_3V3 - Main system power */
+			npm1300_buck2: BUCK2 {
+				regulator-min-microvolt = <3300000>;
+				regulator-max-microvolt = <3300000>;
+				regulator-init-microvolt = <3300000>;
+				regulator-always-on;
+				regulator-boot-on;
+			};
+
+			/* LDO1: VDDMIC_1V8 - Microphone power */
+			npm1300_ldo1: LDO1 {
+				regulator-min-microvolt = <1800000>;
+				regulator-max-microvolt = <1800000>;
+				regulator-init-microvolt = <1800000>;
+				regulator-initial-mode = <2>;
+				startup-delay-us = <1000>;
+			};
+
+			/* LDO2: VDD_SD - SD card power, controlled by PMIC GPIO3 */
+			npm1300_ldo2: LDO2 {
+				regulator-min-microvolt = <3300000>;
+				regulator-max-microvolt = <3300000>;
+				regulator-init-microvolt = <3300000>;
+				/* The PMIC powers LDO2 by default.  Start with VDD_SD
+				 * off so each runtime regulator_enable() has exactly one
+				 * matching regulator_disable(). */
+				regulator-boot-off;
+				enable-gpio-config = <NPM13XX_GPIO_CHAN_3 GPIO_ACTIVE_HIGH>;
+				startup-delay-us = <1000>;
+			};
+		};
+		npm1300_charger: charger {
+			compatible = "nordic,npm1300-charger";
+			/* Charge termination raised 4.20→4.25V so the fuel gauge
+			 * reaches ~100% instead of plateauing at ~99%. The cell
+			 * (240/HSZ 362123) is a 4.20V-rated Li-Po; 4.25V is a
+			 * mild overcharge. Tradeoff: reduced cycle life. */
+			term-microvolt = <4250000>;
+			term-warm-microvolt = <4100000>;
+			current-microamp = <220000>;
+			dischg-limit-microamp = <1000000>;
+			vbus-limit-microamp = <500000>;
+			thermistor-ohms = <10000>;
+			thermistor-beta = <3380>;
+			/* JEITA battery-temperature profile (TS-pin NTC). The NPM1300
+			 * classifies the cell into cold/cool/normal/warm/hot zones
+			 * autonomously (works even if the MCU hangs) — defense in depth
+			 * alongside the software gate in battery.c.
+			 *   cold <0C   : charge inhibit (Li-Po plating protection)
+			 *   cool 0-10C : reduced current (ICOOL)
+			 *   warm 40-45C: charge to term-warm-microvolt (4.10V, not 4.25V)
+			 *   hot  >45C  : HARD charge inhibit
+			 * NOTE: the NTC path has NO register hysteresis (only the
+			 * die-temp pair below does), so battery.c latches OFF at 45C
+			 * and only re-enables at 40C to stop boundary oscillation.
+			 * term-warm-microvolt (4.10V above) only takes effect once
+			 * thermistor-warm-millidegrees is set. */
+			thermistor-cold-millidegrees = <0>;
+			thermistor-cool-millidegrees = <10000>;
+			thermistor-warm-millidegrees = <40000>;
+			thermistor-hot-millidegrees   = <45000>;
+			/* PMIC die (silicon) overheat protection — the charger IC's own
+			 * temperature, separate from the cell. Explicit stop/resume
+			 * hysteresis (the only thermal pair with register-level
+			 * hysteresis on the NPM1300). Conservative values; 85C is well
+			 * below the chip's max junction temp and won't trip in normal
+			 * charging. */
+			dietemp-stop-millidegrees   = <85000>;
+			dietemp-resume-millidegrees = <75000>;
+			charging-enable;
+			/* Allow charging a deeply discharged battery (below VBATLOW),
+			 * e.g. after the protection IC trips at ~2.4V. Without this the
+			 * charger refuses to activate and the battery cannot recover. */
+			vbatlow-charge-enable;
+		};
+	};
+};
+
+&i2c2 {
+	status = "okay";
+	pinctrl-0 = <&i2c2_default>;
+	pinctrl-1 = <&i2c2_sleep>;
+	pinctrl-names = "default", "sleep";
+	clock-frequency = <400000>;
+	zephyr,concat-buf-size = <96>;
+	zephyr,flash-buf-max-size = <96>;
+
+	ch1115: oled@3c {
+		compatible = "solomon,ch1115";
+		reg = <0x3c>;
+		reset-gpios = <&gpio1 9 GPIO_ACTIVE_LOW>;
+		width = <88>;
+		height = <48>;  /* Actual display resolution */
+		segment-offset = <0>;
+		page-offset = <1>;  /* +1 page (8 pixels) to center content visually */
+		display-offset = <0>;  /* Hardware COM start from 0 */
+		multiplex-ratio = <63>;  /* Activate all 64 COM lines */
+		prechargep = <0x22>;
+		segment-remap = <0>;
+		com-invdir = <0>;
+		status = "okay";
+	};
+};
+
+
+&spi3 {
+	compatible = "nordic,nrf-spim";
+	status = "okay";
+	pinctrl-0 = <&spi3_default>;
+	pinctrl-1 = <&spi3_sleep>;
+	pinctrl-names = "default", "sleep";
+	cs-gpios = <&gpio0 20 GPIO_ACTIVE_LOW>;
+
+	spi_flash: py25q64h@0 {
+		compatible = "jedec,spi-nor";
+		status = "okay";
+		reg = <0>;
+		spi-max-frequency = <240000000>;
+		quad-enable-requirements = "S2B1v1";
+		wp-gpios = <&gpio0 19 GPIO_ACTIVE_LOW>;
+		hold-gpios = <&gpio0 21 GPIO_ACTIVE_LOW>;
+		jedec-id = [ 85 20 17  ];
+		sfdp-bfp = [ e5 20 f1 ff ff ff ff 00 44 eb 08 6b 08 3b 80 bb ee ff ff ff ff ff 00 ff ff ff 00 ff 0c 20 0f 52 10 d8 08 81  ];
+		size = <DT_SIZE_M(64)>;
+			has-dpd;
+
+		partitions {
+			compatible = "fixed-partitions";
+			#address-cells = <1>;
+			#size-cells = <1>;
+
+			/* OTA slot 0: App image (960KB) */
+			slot0_secondary: partition@0 {
+				label = "image-0-secondary";
+				reg = <0x00000000 0x000F0000>;
+			};
+
+			/* OTA slot 1: Netcore image (256KB) */
+			slot1_secondary: partition@f0000 {
+				label = "image-1-secondary";
+				reg = <0x000F0000 0x00040000>;
+			};
+
+			/* LittleFS partition (~6.8MB, 64KB aligned)
+			 * External flash: 8MB = 128 x 64KB blocks total
+			 * OTA slots: 15 + 4 = 19 blocks used
+			 * LittleFS: 128 - 19 = 109 blocks = 6960KB = 0x6D0000
+			 */
+			lfs_partition: partition@130000 {
+				label = "lfs-storage";
+				reg = <0x00130000 0x006D0000>;
+			};
+		};
+	};
+};
+
+&spi4 {
+	compatible = "nordic,nrf-spim";
+	status = "okay";
+	pinctrl-0 = <&spi4_default>;
+	pinctrl-1 = <&spi4_sleep>;
+	pinctrl-names = "default", "sleep";
+	cs-gpios = <&gpio0 9 GPIO_ACTIVE_LOW>;
+
+	sdhc0: sdhc@0 {
+		compatible = "zephyr,sdhc-spi-slot";
+		reg = <0>;
+		status = "okay";
+		mmc {
+			compatible = "zephyr,sdmmc-disk";
+			status = "okay";
+			disk-name = "SD";
+		};
+		spi-max-frequency = <24000000>;
+	};
+};
+
+
+&qspi {
+	pinctrl-0 = <&qspi_default>;
+	pinctrl-1 = <&qspi_sleep>;
+	pinctrl-names = "default", "sleep";
+	status = "okay";
+	nrf70: nrf7002@1 {
+		compatible = "nordic,nrf7002-qspi";
+		status = "okay";
+		reg = <1>;
+		qspi-frequency = <24000000>;
+		qspi-quad-mode;
+		#include "nrf70_common.dtsi"
+		#include "nrf70_common_5g.dtsi"
+	};
+};
+
+#include "clip-cpuapp_partitioning.dtsi"
+#include "clip-shared_sram.dtsi"
+
+/* Boot mode retention via GPREGRET1 - used by MCUboot serial recovery */
+&gpregret1 {
+	boot_mode0: boot_mode@0 {
+		compatible = "zephyr,retention";
+		status = "okay";
+		reg = <0x0 0x1>;
+	};
+};

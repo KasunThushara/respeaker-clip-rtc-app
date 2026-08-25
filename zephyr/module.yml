@@ -1,0 +1,8 @@
+name: respeaker_clip
+build:
+  cmake: .
+  kconfig: Kconfig
+  sysbuild-cmake: sysbuild
+  settings:
+    board_root: .
+    dts_root: .

@@ -1,0 +1,44 @@
+diff --git a/boot/boot_serial/src/boot_serial.c b/boot/boot_serial/src/boot_serial.c
+index 495488ca..250624db 100644
+--- a/boot/boot_serial/src/boot_serial.c
++++ b/boot/boot_serial/src/boot_serial.c
+@@ -890,6 +890,18 @@ static off_t erase_range(const struct flash_area *fap, off_t start, off_t end)
+ }
+ #endif
+ 
++/*
++ * Weak hook for upload progress notification.
++ * Can be overridden to provide real-time progress feedback (e.g. display).
++ */
++__weak void boot_serial_upload_progress_hook(uint32_t img_index,
++                                             size_t curr_off, size_t img_size)
++{
++    (void)img_index;
++    (void)curr_off;
++    (void)img_size;
++}
++
+ /*
+  * Image upload request.
+  */
+@@ -1161,6 +1173,10 @@ bs_upload(char *buf, int len)
+ 
+     if (rc == 0) {
+         curr_off += img_chunk_len + rem_bytes;
++
++        /* Notify progress after each chunk */
++        boot_serial_upload_progress_hook(img_num, curr_off, img_size);
++
+         if (curr_off == img_size) {
+ #if defined(MCUBOOT_ERASE_PROGRESSIVELY) && defined(BOOT_IMAGE_HAS_STATUS_FIELDS)
+             /* Assure that sector for image trailer was erased. */
+@@ -1172,6 +1188,9 @@ bs_upload(char *buf, int len)
+                 goto out;
+             }
+ #endif
++            /* Notify upload complete */
++            boot_serial_upload_progress_hook(img_num, img_size, img_size);
++
+             rc = BOOT_HOOK_CALL(boot_serial_uploaded_hook, 0, img_num, fap,
+                                 img_size);
+             if (rc) {

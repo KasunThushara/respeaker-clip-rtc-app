@@ -1,0 +1,25 @@
+# SPDX-License-Identifier: Apache-2.0
+
+source "Kconfig.zephyr"
+
+menu "HTTP Server Sample Configuration"
+
+config HTTP_SERVER_PORT
+	int "HTTP server port"
+	default 80
+	help
+	  Port number for the HTTP server to listen on.
+
+config HTTP_SERVER_RX_BUF_SIZE
+	int "HTTP server receive buffer size"
+	default 512
+	help
+	  Size of the buffer used to receive HTTP requests.
+
+config HTTP_SERVER_TX_BUF_SIZE
+	int "HTTP server transmit buffer size"
+	default 2048
+	help
+	  Size of the buffer used to send HTTP responses.
+
+endmenu

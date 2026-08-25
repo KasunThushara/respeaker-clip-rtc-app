@@ -1,0 +1,16 @@
+/*
+ * Copyright (c) 2024 Clip
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/* TX power reduced to prevent receiver overload at close range (<30cm).
+ * The phone's WiFi LNA saturates at high received power → PHY-layer frame
+ * corruption → silent drops. 6 dBm keeps the signal within the phone's
+ * linear range at >10cm while still covering 2-3m for file transfer. */
+wifi-max-tx-pwr-5g-low-mcs0 = <6>;
+wifi-max-tx-pwr-5g-low-mcs7 = <6>;
+wifi-max-tx-pwr-5g-mid-mcs0 = <6>;
+wifi-max-tx-pwr-5g-mid-mcs7 = <6>;
+wifi-max-tx-pwr-5g-high-mcs0 = <6>;
+wifi-max-tx-pwr-5g-high-mcs7 = <6>;

@@ -1,0 +1,24 @@
+#
+# Copyright (c) 2026 Seeed Technology Co., Ltd.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+source "Kconfig.zephyr"
+
+menu "WiFi BLE Coexistence Test"
+
+config COEX_SEP_ANTENNAS
+	bool "Use separate antennas for BT and WLAN"
+	default n
+	help
+	  Enable if BT and WLAN use separate antennas.
+	  Disable (default) for shared antenna (Clip board).
+
+config SR_PROTOCOL_BLE
+	bool "Short Range protocol is Bluetooth LE"
+	default y
+	help
+	  Indicates the Short Range protocol is Bluetooth LE.
+
+endmenu

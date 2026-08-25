@@ -1,0 +1,130 @@
+name: firmware
+
+# Compilation check for the Clip firmware (Zephyr v4.3 / NCS v3.3.0).
+#
+# Installs the Zephyr SDK 0.17.0 toolchain + the NCS v3.3.0 source tree via
+# `west` (the `nrfutil toolchain-manager` subcommand was deprecated and removed,
+# and the standalone pc-nrfutil binary only ships dfu/keys/pkg/settings — no
+# toolchain install). Approach follows Nordic/Memfault's canonical NCS CI guide:
+# apt host deps → Zephyr SDK tarball → west init/update → build.
+#
+# The clip repo is consumed as a Zephyr module (ZEPHYR_EXTRA_MODULES) that
+# provides the board; the board's Kconfig.sysbuild makes every build a sysbuild
+# (MCUboot + app core + ipc-radio) with no extra flags.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: firmware-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build clip app (NCS v3.3.0)
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout this module
+        uses: actions/checkout@v4
+        with:
+          path: respeaker_clip
+
+      - name: Resolve version (for artifact name)
+        # Tag-style name (vX.Y.Z) from applications/clip/VERSION. Always present
+        # after checkout, so the name is available even when the build fails.
+        id: ver
+        run: |
+          v="respeaker_clip/applications/clip/VERSION"
+          MAJ=$(grep VERSION_MAJOR "$v" | awk '{print $3}')
+          MIN=$(grep VERSION_MINOR "$v" | awk '{print $3}')
+          PAT=$(grep PATCHLEVEL    "$v" | awk '{print $3}')
+          echo "version=$MAJ.$MIN.$PAT" >> "$GITHUB_OUTPUT"
+          echo "name=v$MAJ.$MIN.$PAT"   >> "$GITHUB_OUTPUT"
+          echo "Artifact name will be: v$MAJ.$MIN.$PAT"
+
+      - name: Install host build dependencies + west
+        # Package list from Zephyr getting-started (works on ubuntu-22.04;
+        # python3.10 has no PEP-668 "externally-managed" block on pip).
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            ccache cmake device-tree-compiler dfu-util file g++-multilib \
+            gcc gcc-multilib git gperf make ninja-build python3-dev python3-pip \
+            python3-setuptools python3-venv python3-wheel wget xz-utils \
+            libsdl2-dev libmagic1
+          pip3 install west
+
+      - name: Install Zephyr SDK 0.17.0 (arm / Cortex-M only)
+        run: |
+          wget -q --tries=3 --retry-connrefused --waitretry=5 \
+            https://github.com/zephyrproject-rtos/sdk-ng/releases/download/v0.17.0/zephyr-sdk-0.17.0_linux-x86_64_minimal.tar.xz
+          tar xf zephyr-sdk-0.17.0_linux-x86_64_minimal.tar.xz -C "$HOME"
+          "$HOME/zephyr-sdk-0.17.0/setup.sh" -c -t arm-zephyr-eabi
+
+      - name: Initialize NCS v3.3.0 workspace
+        run: |
+          west init -m https://github.com/nrfconnect/sdk-nrf --mr v3.3.0 ncs
+          cd ncs
+          west update --narrow -o=--depth=1
+          # Build-essential deps only. zephyr/requirements-BASE.txt (NOT the
+          # full requirements.txt) + nrf/requirements.txt. The full zephyr
+          # requirements.txt pulls requirements-extras.txt -> spsdk, whose git
+          # #egg= deps (spsdk-mcu-link/spsdk-pyocd) make pip's resolver backtrack
+          # through every setuptools_scm version and hang. The build doesn't
+          # need spsdk. nrf/requirements.txt supplies cryptography/ecdsa for
+          # image signing (keygen.py) which the zephyr-only set misses.
+          pip3 install -r zephyr/scripts/requirements-base.txt -r nrf/scripts/requirements.txt
+
+      - name: Apply MCUboot patches (idempotent)
+        run: |
+          cd ncs/bootloader/mcuboot
+          shopt -s nullglob
+          for p in "$GITHUB_WORKSPACE"/respeaker_clip/patches/mcuboot/0*.patch; do
+            if git apply --check "$p" 2>/dev/null; then
+              echo "applying $(basename "$p")"
+              git apply "$p"
+            else
+              echo "skip (already applied): $(basename "$p")"
+            fi
+          done
+
+      - name: Build debug + production
+        # ZEPHYR_EXTRA_MODULES must be an ENV var, not -D: Kconfig module
+        # discovery runs before CMake configure.
+        run: |
+          cd ncs
+          export ZEPHYR_EXTRA_MODULES="$GITHUB_WORKSPACE/respeaker_clip"
+          APP="$GITHUB_WORKSPACE/respeaker_clip/applications/clip"
+          west build -b clip/nrf5340/cpuapp "$APP" --build-dir build-clip --pristine=always
+          west build -b clip/nrf5340/cpuapp "$APP" --build-dir build-clip-prod --pristine=always \
+            -- -DSNIPPET_ROOT="$APP" -DSNIPPET=production
+
+      - name: Export artifacts (release naming)
+        # Same 8 files / naming as release.yml's output/ — matches output/<ver>/.
+        run: |
+          cd ncs
+          VER="${{ steps.ver.outputs.version }}"
+          OUT="$GITHUB_WORKSPACE/output/$VER"
+          mkdir -p "$OUT"
+          cp build-clip/merged.hex                       "$OUT/clip-$VER-debug-merged.hex"
+          cp build-clip/merged_CPUNET.hex                "$OUT/clip-$VER-debug-merged_CPUNET.hex"
+          cp build-clip/dfu_application.zip              "$OUT/clip-$VER-debug-ota.zip"
+          cp build-clip/clip/zephyr/zephyr.signed.bin    "$OUT/clip-$VER-debug-signed.bin"
+          cp build-clip-prod/merged.hex                  "$OUT/clip-$VER-production-merged.hex"
+          cp build-clip-prod/merged_CPUNET.hex           "$OUT/clip-$VER-production-merged_CPUNET.hex"
+          cp build-clip-prod/dfu_application.zip          "$OUT/clip-$VER-production-ota.zip"
+          cp build-clip-prod/clip/zephyr/zephyr.signed.bin "$OUT/clip-$VER-production-signed.bin"
+          echo "=== exported artifacts ($VER) ==="
+          ls -la "$OUT"
+
+      - name: Upload build artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.ver.outputs.name }}
+          path: output/${{ steps.ver.outputs.version }}/
+          if-no-files-found: ignore

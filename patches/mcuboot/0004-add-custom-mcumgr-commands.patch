@@ -1,0 +1,152 @@
+diff --git a/boot/zephyr/CMakeLists.txt b/boot/zephyr/CMakeLists.txt
+index 54e9e3e6..98200eea 100644
+--- a/boot/zephyr/CMakeLists.txt
++++ b/boot/zephyr/CMakeLists.txt
+@@ -96,6 +96,12 @@ if(DEFINED CONFIG_ENABLE_MGMT_PERUSER)
+       boot_serial_extension_zephyr_basic.c
+       )
+   endif()
++
++  if(DEFINED CONFIG_ENABLE_MGMT_PERUSER)
++    zephyr_library_sources(
++      boot_serial_extension_clip.c
++      )
++  endif()
+ endif()
+
+ if(DEFINED CONFIG_BOOT_SHARE_BACKEND_RETENTION)
+
+diff --git a/boot/zephyr/boot_serial_extension_clip.c b/boot/zephyr/boot_serial_extension_clip.c
+new file mode 100644
+index 00000000..00000000
+--- /dev/null
++++ b/boot/zephyr/boot_serial_extension_clip.c
+@@ -0,0 +1,128 @@
++/*
++ * Copyright (c) 2024 Clip
++ *
++ * SPDX-License-Identifier: Apache-2.0
++ *
++ * Custom mcumgr commands for reSpeaker Clip recovery mode:
++ *   - Erase SD card (destroys FAT filesystem header)
++ *   - Erase LFS partition (destroys BLE bonds and settings)
++ */
++
++#include <zephyr/kernel.h>
++#include <zephyr/drivers/flash.h>
++#include <zephyr/drivers/regulator.h>
++#include <zephyr/storage/disk_access.h>
++
++#include "bootutil/bootutil_log.h"
++#include "../boot_serial/src/boot_serial_priv.h"
++#include <zcbor_encode.h>
++#include <boot_serial/boot_serial_extensions.h>
++
++#include <flash_map_backend/flash_map_backend.h>
++#include <sysflash/sysflash.h>
++
++BOOT_LOG_MODULE_DECLARE(mcuboot);
++
++#define CLIP_GRP_CMD_ERASE_SD    0
++#define CLIP_GRP_CMD_ERASE_LFS   1
++
++/* LFS partition on external flash (from pm_static).
++ * Erase 2 blocks (128KB) — the LittleFS superblock metadata pair is
++ * pinned at {0,1} and never relocates. LittleFS block_size == SPI NOR
++ * erase page == 64KB, so the pair spans the first 128KB. A single
++ * 64KB erase kills block 0 but leaves block 1 for recovery. */
++#define LFS_FLASH_OFFSET  0x130000
++#define LFS_ERASE_SIZE    0x20000  /* 2 x 64KB blocks = superblock pair */
++
++static int bs_custom_erase_sd_card(zcbor_state_t *cs)
++{
++	const struct device *ldo2 = DEVICE_DT_GET(DT_NODELABEL(npm1300_ldo2));
++	const char *disk = "SD";
++	uint8_t zero[512] = {0};
++	int rc;
++
++	/* Enable LDO2 on-demand: turn on SD power, erase, turn off.
++	 * regulator-boot-on is NOT used in the overlay because the
++	 * app's regulator init reads the physical LDO2 state from the
++	 * PMIC (get_enabled) and seeds its refcount from it — a
++	 * boot-on from the bootloader would leak a permanent +1 into
++	 * the app, preventing the idle-power-gating from ever turning
++	 * LDO2 off. */
++	if (device_is_ready(ldo2)) {
++		regulator_enable(ldo2);
++	}
++
++	rc = disk_access_init(disk);
++	if (rc != 0) {
++		BOOT_LOG_ERR("SD init failed: %d", rc);
++		goto out;
++	}
++
++	rc = disk_access_write(disk, zero, 0, 1);
++	if (rc != 0) {
++		BOOT_LOG_ERR("SD erase failed: %d", rc);
++	}
++
++out:
++	if (device_is_ready(ldo2)) {
++		regulator_disable(ldo2);
++	}
++	if (rc != 0) {
++		return MGMT_ERR_EUNKNOWN;
++	}
++
++	BOOT_LOG_INF("SD card erased");
++	return MGMT_ERR_OK;
++}
++
++static int bs_custom_erase_lfs(zcbor_state_t *cs)
++{
++	const struct device *flash_dev;
++
++	flash_dev = DEVICE_DT_GET(DT_CHOSEN(nordic_pm_ext_flash));
++	if (!device_is_ready(flash_dev)) {
++		BOOT_LOG_ERR("External flash not ready");
++		return MGMT_ERR_EUNKNOWN;
++	}
++
++	int rc = flash_erase(flash_dev, LFS_FLASH_OFFSET, LFS_ERASE_SIZE);
++	if (rc != 0) {
++		BOOT_LOG_ERR("LFS erase failed: %d", rc);
++		return MGMT_ERR_EUNKNOWN;
++	}
++
++	BOOT_LOG_INF("LFS partition erased");
++	return MGMT_ERR_OK;
++}
++
++static int bs_custom_clip_handler(const struct nmgr_hdr *hdr,
++                                  const char *buffer, int len,
++                                  zcbor_state_t *cs)
++{
++	int rc;
++
++	if (hdr->nh_group != MGMT_GROUP_ID_PERUSER ||
++	    hdr->nh_op != NMGR_OP_WRITE) {
++		return MGMT_ERR_ENOTSUP;
++	}
++
++	switch (hdr->nh_id) {
++	case CLIP_GRP_CMD_ERASE_SD:
++		rc = bs_custom_erase_sd_card(cs);
++		break;
++	case CLIP_GRP_CMD_ERASE_LFS:
++		rc = bs_custom_erase_lfs(cs);
++		break;
++	default:
++		return MGMT_ERR_ENOTSUP;
++	}
++
++	zcbor_map_start_encode(cs, 10);
++	zcbor_tstr_put_lit(cs, "rc");
++	zcbor_uint32_put(cs, rc);
++	zcbor_map_end_encode(cs, 10);
++
++	return rc;
++}
++
++MCUMGR_HANDLER_DEFINE(clip_custom, bs_custom_clip_handler);

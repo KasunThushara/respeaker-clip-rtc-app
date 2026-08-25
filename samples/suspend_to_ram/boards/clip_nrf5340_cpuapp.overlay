@@ -1,0 +1,45 @@
+/*
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * Switch nRF5340 internal regulators from the SDK default LDO to DCDC.
+ * The Clip board has 10µH inductors (L1, L2) wired for DCDC support.
+ * Without this, suspend current is ~500-600 µA higher than the datasheet.
+ *
+ * Disable the nRF7002 WiFi node so its driver and the MPSL coexistence
+ * service (which would otherwise keep HFXO running) are not pulled in.
+ */
+
+&vregmain {
+	regulator-initial-mode = <NRF5X_REG_MODE_DCDC>;
+};
+
+&vregradio {
+	regulator-initial-mode = <NRF5X_REG_MODE_DCDC>;
+};
+
+&wlan0 {
+	status = "disabled";
+};
+
+/* Disable the external SPI flash bus and its power rail for the idle
+ * current baseline. The external flash stays in the partition map (it is
+ * mcuboot's secondary slot — mcuboot enables it in its own overlay), so do
+ * NOT delete nordic,pm-ext-flash here or mcuboot fails to find its
+ * secondary slot (PM_MCUBOOT_SECONDARY_ID undeclared). */
+&spi3 {
+	status = "disabled";
+};
+
+&flash_vdd {
+	status = "disabled";
+};
+
+/*
+ * Add pull-down to SPI4 sleep pinctrl so suspended pins don't float
+ * and leak through the SD card's ESD diodes.
+ */
+&spi4_sleep {
+	group1 {
+		bias-pull-down;
+	};
+};

@@ -1,0 +1,19 @@
+/*
+ * Copyright (c) 2024 Seeed Studio
+ *
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
+ */
+
+/ {
+	chosen {
+		zephyr,shell-ipc = &ipc0;
+		ncs,remote-shell-uart = &uart0;
+		/delete-property/ zephyr,console;
+		/delete-property/ zephyr,shell-uart;
+	};
+};
+
+&uart0 {
+	status = "okay";
+	current-speed = <19200>;
+};

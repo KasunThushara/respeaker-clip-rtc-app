@@ -1,0 +1,14 @@
+# Python requirements for Clip Python SDK
+
+# BLE communication
+bleak>=0.20.0
+
+# Progress bars
+tqdm>=4.60.0
+
+# Serial communication (USB CDC AT terminal)
+pyserial>=3.5
+
+# Web interface (clip-web.py)
+fastapi>=0.100.0
+uvicorn>=0.21.0

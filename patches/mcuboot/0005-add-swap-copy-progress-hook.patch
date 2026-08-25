@@ -1,0 +1,26 @@
+diff --git a/boot/bootutil/src/loader.c b/boot/bootutil/src/loader.c
+index b777b99c..98d85ada 100644
+--- a/boot/bootutil/src/loader.c
++++ b/boot/bootutil/src/loader.c
+@@ -51,6 +51,12 @@
+ #include "bootutil/mcuboot_status.h"
+ #include "bootutil_loader.h"
+ 
++__weak void boot_copy_progress_hook(uint32_t total, uint32_t copied)
++{
++    (void)total;
++    (void)copied;
++}
++
+ #ifndef MCUBOOT_MANIFEST_UPDATES
+ 
+ #if defined(MCUBOOT_DECOMPRESS_IMAGES)
+@@ -1329,6 +1335,8 @@ boot_copy_region(struct boot_loader_state *state,
+ 
+         bytes_copied += chunk_sz;
+ 
++        boot_copy_progress_hook(sz, bytes_copied);
++
+         MCUBOOT_WATCHDOG_FEED();
+     }
+ 

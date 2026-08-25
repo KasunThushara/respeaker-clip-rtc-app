@@ -1,0 +1,23 @@
+/*
+ * Copyright (c) 2024 Clip
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+iovdd-ctrl-gpios = <&gpio0 26 GPIO_ACTIVE_HIGH>;
+bucken-gpios = <&gpio0 11 GPIO_ACTIVE_HIGH>;
+host-irq-gpios = <&gpio0 12 GPIO_ACTIVE_HIGH>;
+/* IOVDD takes ~10ms to ramp up after IO EN assertion on this board */
+iovdd-power-up-delay-ms = <20>;
+
+
+/* 2.4G TX power reduced to prevent receiver overload at close range.
+ * 21/16 dBm causes massive LNA saturation at <30cm. 9 dBm covers 2-5m
+ * for file transfer while keeping close-range signal in the linear zone. */
+wifi-max-tx-pwr-2g-dsss = <9>;
+wifi-max-tx-pwr-2g-mcs0 = <9>;
+wifi-max-tx-pwr-2g-mcs7 = <9>;
+
+wlan0: wlan {
+	compatible = "nordic,wlan";
+};

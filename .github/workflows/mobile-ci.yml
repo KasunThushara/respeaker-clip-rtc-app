@@ -1,0 +1,65 @@
+name: mobile-ci
+
+# Fast checks for the mobile SDKs — runs on every PR (and push to main).
+# Analyze + unit tests for all three platforms, no hardware and no full app
+# builds. Full APK / iOS smoke builds run in mobile-verify.yml (push/manual).
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: mobile-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  flutter:
+    name: Flutter analyze + test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: SDK — pub get / analyze / test
+        working-directory: mobile/sdk/flutter
+        run: |
+          flutter pub get
+          flutter analyze --fatal-infos
+          flutter test
+      - name: Example — pub get / analyze / test
+        working-directory: mobile/sdk/flutter/example
+        run: |
+          flutter pub get
+          flutter analyze --fatal-infos
+          flutter test
+
+  android:
+    name: Android unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Library + sample unit tests
+        working-directory: mobile/sdk/android
+        run: ./gradlew test
+
+  ios:
+    name: iOS Swift test
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Swift package tests
+        working-directory: mobile/sdk/ios
+        run: swift test

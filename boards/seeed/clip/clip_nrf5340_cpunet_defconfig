@@ -1,0 +1,18 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# Network core (b0n bootloader) minimal configuration
+# Note: BLE and IPC_RADIO configurations are in ipc_radio/prj.conf,
+# not here. b0n is a minimal secure bootloader.
+
+# Enable MPU
+CONFIG_ARM_MPU=y
+
+# Enable GPIO
+CONFIG_GPIO=y
+
+# Enable uart driver
+CONFIG_SERIAL=y
+
+# Enable console
+CONFIG_CONSOLE=y
+CONFIG_UART_CONSOLE=y

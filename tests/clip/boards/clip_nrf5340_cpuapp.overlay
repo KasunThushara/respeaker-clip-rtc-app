@@ -1,0 +1,45 @@
+/*
+ * Copyright (c) 2023 Nordic Semiconductor ASA
+ *
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
+ */
+
+/* UART configuration for 921600 baud rate */
+&uart0 {
+	current-speed = <921600>;
+};
+
+/* Enable USB device for MSC only */
+&usbd {
+	status = "okay";
+	cdc_acm_uart {
+		status = "disabled";
+	};
+};
+
+/* The CH1115 driver has no vin-supply phandle. Keep its GPIO supply asserted
+ * for the entire hardware-test session so it cannot be disabled as an unused
+ * regulator before the persistent battery screen starts updating. */
+&oled_reg {
+	regulator-always-on;
+};
+
+/ {
+	/* Point the generic filesystem shell at the external LittleFS partition.
+	 * The test image has Partition Manager disabled, so its partition node is
+	 * named lfs_partition (the production PM-generated alias is unavailable). */
+	fstab {
+		compatible = "zephyr,fstab";
+
+		lfs_test: lfs_test {
+			compatible = "zephyr,fstab,littlefs";
+			mount-point = "/lfs";
+			partition = <&lfs_partition>;
+			read-size = <16>;
+			prog-size = <16>;
+			cache-size = <64>;
+			lookahead-size = <32>;
+			block-cycles = <512>;
+		};
+	};
+};

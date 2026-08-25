@@ -1,0 +1,642 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Clip Control</title>
+<style>
+:root {
+  --bg: #f0f4f0;
+  --surface: #fff;
+  --surface2: #f7f9f7;
+  --text: #1a2e1a;
+  --text2: #6b7c6b;
+  --accent: #2e7d32;
+  --accent-light: #c8e6c9;
+  --danger: #d32f2f;
+  --warn: #f9a825;
+  --radius: 12px;
+  --shadow: 0 1px 4px rgba(0,0,0,0.08);
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+
+.header { background: #2e7d32; color: #fff; padding: 14px 24px; display: flex; align-items: center; gap: 10px; }
+.header h1 { font-size: 18px; font-weight: 700; }
+.header .right { margin-left: auto; display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.dot { width: 8px; height: 8px; border-radius: 50%; }
+.dot.on { background: #fff; box-shadow: 0 0 6px rgba(255,255,255,0.5); }
+.dot.off { background: rgba(255,255,255,0.4); }
+
+.container { max-width: 860px; margin: 0 auto; padding: 16px; }
+.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.card { background: var(--surface); border-radius: var(--radius); padding: 16px; box-shadow: var(--shadow); }
+.card.full { grid-column: 1 / -1; }
+.card h3 { font-size: 13px; font-weight: 600; color: var(--text2); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 12px; display: flex; align-items: center; gap: 6px; }
+.card h3 .icon { font-size: 16px; }
+
+.stats { display: flex; gap: 16px; }
+.stat { flex: 1; text-align: center; }
+.stat-val { font-size: 22px; font-weight: 700; color: var(--accent); }
+.stat-val.recording { color: var(--danger); animation: blink 1.5s infinite; }
+.stat-lbl { font-size: 11px; color: var(--text2); margin-top: 2px; }
+@keyframes blink { 0%,100%{opacity:1}50%{opacity:0.4} }
+
+.batt-bar { width: 60px; height: 5px; background: #e0e0e0; border-radius: 3px; margin: 4px auto 0; overflow: hidden; }
+.batt-fill { height: 100%; border-radius: 3px; transition: width 0.5s; }
+
+.vis-wrap { position: relative; height: 80px; background: #e8f5e9; border-radius: 8px; overflow: hidden; }
+.vis-canvas { width: 100%; height: 100%; }
+.vis-label { position: absolute; top: 6px; right: 8px; font-size: 11px; color: var(--text2); }
+
+.btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.btn { padding: 8px 18px; border: none; border-radius: 8px; font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.15s; display: inline-flex; align-items: center; gap: 6px; }
+.btn-accent { background: var(--accent); color: #fff; }
+.btn-accent:hover { background: #256029; }
+.btn-green { background: #43a047; color: #fff; }
+.btn-green:hover { background: #388e3c; }
+.btn-red { background: var(--danger); color: #fff; }
+.btn-red:hover { background: #c62828; }
+.btn-ghost { background: var(--surface2); color: var(--text); }
+.btn-ghost:hover { background: #e0e0e0; }
+.btn-sm { padding: 5px 12px; font-size: 12px; }
+.btn:disabled { opacity: 0.35; cursor: not-allowed; }
+.btn-recording { background: var(--danger); color: #fff; animation: pulse 1.5s infinite; }
+@keyframes pulse { 0%,100%{box-shadow:0 0 0 0 rgba(211,47,47,0.4)}50%{box-shadow:0 0 0 8px rgba(211,47,47,0)} }
+
+.session-list { list-style: none; }
+.session-list li { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid #eee; }
+.session-list li:last-child { border-bottom: none; }
+.sid { font-family: 'SF Mono', 'Cascadia Code', monospace; font-size: 13px; }
+.sinfo { font-size: 12px; color: var(--text2); }
+
+/* Sync info during recording */
+.sync-info { background: var(--accent-light); border-radius: 6px; padding: 8px 12px; margin-top: 10px; font-size: 12px; color: #2e7d32; display: none; }
+.sync-info.active { display: block; }
+.sync-info .si-row { display: flex; justify-content: space-between; }
+.sync-info .si-label { color: var(--text2); }
+
+/* Player */
+.player-wrap { background: var(--surface2); border-radius: 8px; padding: 12px; }
+.player-top { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.player-top select { flex: 1; background: var(--surface); color: var(--text); border: 1px solid #e0e0e0; border-radius: 6px; padding: 6px 8px; font-size: 13px; }
+.player-controls { display: flex; align-items: center; gap: 10px; }
+.player-controls .btn { padding: 6px 14px; }
+.player-controls .btn:disabled { opacity: 0.3; }
+.time-display { font-family: 'SF Mono', monospace; font-size: 12px; color: var(--text2); min-width: 90px; text-align: center; }
+.player-progress { width: 100%; height: 4px; background: #e0e0e0; border-radius: 2px; cursor: pointer; margin: 8px 0; }
+.player-progress:hover { height: 6px; }
+.player-progress-fill { height: 100%; background: var(--accent); border-radius: 2px; transition: width 0.1s linear; width: 0%; }
+.player-bottom { display: flex; justify-content: space-between; font-size: 12px; color: var(--text2); }
+.speed-btns { display: flex; gap: 4px; }
+.speed-btns button { background: var(--surface); border: 1px solid #e0e0e0; color: var(--text2); border-radius: 4px; padding: 2px 6px; font-size: 11px; cursor: pointer; }
+.speed-btns button.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+
+.config-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.config-item label { display: block; font-size: 11px; color: var(--text2); margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.3px; }
+.config-item select, .config-item input[type="range"] { width: 100%; padding: 6px 8px; background: var(--surface); color: var(--text); border: 1px solid #e0e0e0; border-radius: 6px; font-size: 13px; }
+.config-item input[type="range"] { padding: 0; height: 6px; -webkit-appearance: none; appearance: none; border: none; background: #e0e0e0; border-radius: 3px; cursor: pointer; }
+.config-item input[type="range"]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; background: var(--accent); border-radius: 50%; cursor: pointer; }
+.config-val { float: right; font-size: 13px; font-weight: 600; color: var(--accent); }
+
+.toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: #323232; color: #fff; padding: 10px 20px; border-radius: 8px; font-size: 13px; box-shadow: 0 4px 20px rgba(0,0,0,0.3); z-index: 999; opacity: 0; transition: opacity 0.3s; pointer-events: none; }
+.toast.show { opacity: 1; }
+
+@media (max-width: 640px) {
+  .grid { grid-template-columns: 1fr; }
+  .stats { gap: 8px; }
+  .stat-val { font-size: 18px; }
+}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>Clip Control</h1>
+  <div class="right">
+    <span class="dot off" id="conn-dot"></span>
+    <span id="conn-text">Disconnected</span>
+  </div>
+</div>
+
+<div class="container">
+  <div class="grid">
+
+    <!-- Status -->
+    <div class="card">
+      <h3>Device</h3>
+      <div class="stats">
+        <div class="stat"><div class="stat-val" id="stat-state">--</div><div class="stat-lbl">State</div></div>
+        <div class="stat">
+          <div class="stat-val" id="stat-battery">--</div>
+          <div class="stat-lbl">Battery</div>
+          <div class="batt-bar"><div class="batt-fill" id="batt-fill" style="width:0%"></div></div>
+        </div>
+        <div class="stat"><div class="stat-val" id="stat-mode">--</div><div class="stat-lbl">Mode</div></div>
+      </div>
+    </div>
+
+    <!-- Audio Visualization -->
+    <div class="card">
+      <h3>Audio Level</h3>
+      <div class="vis-wrap">
+        <canvas id="vis-canvas" class="vis-canvas"></canvas>
+        <span class="vis-label" id="vis-label">idle</span>
+      </div>
+    </div>
+
+    <!-- Recording -->
+    <div class="card">
+      <h3>Recording</h3>
+      <div class="rec-timer" id="rec-timer" style="display:none">
+        <span class="rec-dot" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--danger);margin-right:6px;animation:blink 1.5s infinite"></span>
+        <span id="rec-duration" style="font-family:'SF Mono',monospace;font-size:20px;font-weight:700;color:var(--danger)">0:00</span>
+        <span id="rec-session" style="font-family:'SF Mono',monospace;font-size:12px;color:var(--text2);margin-left:8px"></span>
+      </div>
+      <div class="btn-row" id="rec-btns">
+        <button class="btn btn-accent" id="btn-start" onclick="startRecording()">Record</button>
+        <button class="btn btn-ghost" id="btn-pause" onclick="pauseRecording()" disabled>Pause</button>
+        <button class="btn btn-red" id="btn-stop" onclick="stopRecording()" disabled>Stop</button>
+        <button class="btn btn-ghost" id="btn-mark" onclick="addBookmark()" disabled>Bookmark</button>
+      </div>
+      <div class="sync-info" id="sync-info">
+        <div class="si-row"><span>Files</span><span id="si-files">0</span></div>
+        <div class="si-row"><span>Size</span><span id="si-size">0 B</span></div>
+        <div class="si-row"><span>Current</span><span id="si-file">--</span></div>
+      </div>
+    </div>
+
+    <!-- Player -->
+    <div class="card">
+      <h3>Playback</h3>
+      <div class="player-wrap">
+        <div class="player-top">
+          <select id="player-select"><option value="">Select recording...</option></select>
+        </div>
+        <div class="player-controls">
+          <button class="btn btn-ghost btn-sm" onclick="playerSkip(-10)">&#9194;&#9194;</button>
+          <button class="btn btn-accent" id="btn-play" onclick="playerToggle()" disabled>Play</button>
+          <button class="btn btn-ghost btn-sm" onclick="playerSkip(10)">&#9193;&#9194;</button>
+          <span class="time-display" id="player-time">0:00 / 0:00</span>
+        </div>
+        <div class="player-progress" id="player-progress" onclick="playerSeek(event)">
+          <div class="player-progress-fill" id="player-progress-fill"></div>
+        </div>
+        <div class="player-bottom">
+          <div class="speed-btns">
+            <button onclick="playerSpeed(0.5)">0.5x</button>
+            <button onclick="playerSpeed(0.75)">0.75x</button>
+            <button class="active" onclick="playerSpeed(1)">1x</button>
+            <button onclick="playerSpeed(1.5)">1.5x</button>
+            <button onclick="playerSpeed(2)">2x</button>
+          </div>
+          <span id="player-info"></span>
+        </div>
+      </div>
+      <audio id="audio-el" preload="auto"></audio>
+    </div>
+
+    <!-- Sessions -->
+    <div class="card">
+      <h3>Sessions <span style="float:right;font-weight:400;cursor:pointer" onclick="refreshSessions()">refresh</span></h3>
+      <ul class="session-list" id="session-list">
+        <li style="color:var(--text2)">Loading...</li>
+      </ul>
+    </div>
+
+    <!-- Config -->
+    <div class="card">
+      <h3>Configuration</h3>
+      <div class="config-grid">
+        <div class="config-item">
+          <label>Mode</label>
+          <select id="cfg-mode"><option value="normal">Normal</option><option value="enhanced">Enhanced</option></select>
+        </div>
+        <div class="config-item">
+          <label>Noise <span class="config-val" id="noise-val">0 dB</span></label>
+          <input type="range" id="cfg-noise" min="0" max="60" value="0" step="1"
+                 oninput="document.getElementById('noise-val').textContent=this.value+' dB'">
+        </div>
+        <div class="config-item">
+          <label>Dereverb</label>
+          <select id="cfg-dereverb"><option value="off">Off</option><option value="on">On</option></select>
+        </div>
+        <div class="config-item">
+          <label>Auto Delete</label>
+          <select id="cfg-autodel"><option value="off">Off</option><option value="3">3 days</option><option value="7">7 days</option><option value="14">14 days</option><option value="30">30 days</option></select>
+        </div>
+      </div>
+      <div class="btn-row" style="margin-top:12px">
+        <button class="btn btn-ghost" onclick="saveConfig()">Save Config</button>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const API = '';
+let ws = null, reconnectTimer = null;
+let audioEl, audioCtx, isPlaying = false, currentSpeed = 1;
+let isAttached = false;  // Attached to an existing recording (read-only)
+let recTimerStart = 0;  // Timestamp when we started tracking duration
+let recBaseDuration = 0; // Device-reported duration at attach time (seconds)
+let recTimerInterval = null;
+
+function fmt(bytes) {
+  if (bytes >= 1073741824) return (bytes / 1073741824).toFixed(1) + ' GB';
+  if (bytes >= 1048576) return (bytes / 1048576).toFixed(1) + ' MB';
+  if (bytes >= 1024) return (bytes / 1024).toFixed(1) + ' KB';
+  return bytes + ' B';
+}
+function fmtTime(s) {
+  if (!isFinite(s)) return '0:00';
+  return Math.floor(s/60) + ':' + String(Math.floor(s%60)).padStart(2,'0');
+}
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg; el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 2500);
+}
+async function api(path, options = {}) {
+  try {
+    const resp = await fetch(API + path, { headers: {'Content-Type':'application/json'}, ...options });
+    return await resp.json();
+  } catch(e) { return { ok:false, error:e.message }; }
+}
+
+// ---- Status ----
+function updateStatus(data) {
+  if (!data.ok) return;
+  const d = data.data || {};
+  const state = d.state || '--';
+  document.getElementById('stat-state').textContent = state;
+  document.getElementById('stat-mode').textContent = d.mode || '--';
+
+  const batt = d.battery;
+  document.getElementById('stat-battery').textContent = batt + '%';
+  const fill = document.getElementById('batt-fill');
+  fill.style.width = batt + '%';
+  fill.style.background = batt > 20 ? 'var(--accent)' : 'var(--danger)';
+
+  const isRec = state === 'RECORDING';
+  const isWifi = state === 'WIFI_SYNC';
+  const btnStart = document.getElementById('btn-start');
+  const btnPause = document.getElementById('btn-pause');
+  const btnStop = document.getElementById('btn-stop');
+  const btnMark = document.getElementById('btn-mark');
+  const timerEl = document.getElementById('rec-timer');
+
+  if (isRec) {
+    // Recording active — show timer
+    timerEl.style.display = '';
+    document.getElementById('stat-state').className = 'stat-val recording';
+
+    // Start duration timer if not already running
+    if (!recTimerInterval) {
+      recBaseDuration = d.duration || 0;
+      recTimerStart = Date.now();
+      recTimerInterval = setInterval(() => {
+        const elapsed = recBaseDuration + (Date.now() - recTimerStart) / 1000;
+        document.getElementById('rec-duration').textContent = fmtTime(elapsed);
+      }, 500);
+      document.getElementById('rec-duration').textContent = fmtTime(recBaseDuration);
+    }
+
+    // Show session ID in timer
+    const sessionId = d.session || '';
+    document.getElementById('rec-session').textContent = sessionId;
+
+    if (isAttached) {
+      // Attached mode: hide Start/Pause, show Stop + Bookmark
+      btnStart.style.display = 'none';
+      btnPause.style.display = 'none';
+      btnStop.disabled = false;
+      btnMark.disabled = false;
+    } else {
+      btnStart.style.display = '';
+      btnPause.style.display = '';
+      btnStart.disabled = true;
+      btnStart.className = 'btn btn-recording';
+      btnStart.textContent = 'Recording...';
+      btnPause.disabled = false;
+      btnStop.disabled = false;
+      btnMark.disabled = false;
+    }
+  } else {
+    // Not recording — stop timer
+    if (recTimerInterval) {
+      clearInterval(recTimerInterval);
+      recTimerInterval = null;
+    }
+    timerEl.style.display = 'none';
+    document.getElementById('rec-session').textContent = '';
+    isAttached = false;
+
+    if (isWifi) {
+      btnStart.style.display = '';
+      btnPause.style.display = '';
+      btnStart.className = 'btn btn-accent';
+      btnStart.textContent = 'WiFi Active';
+      btnStart.title = 'Cannot record while WiFi is active';
+      btnStart.disabled = true;
+      btnPause.disabled = true;
+      btnStop.disabled = true;
+      btnMark.disabled = true;
+    } else {
+      btnStart.style.display = '';
+      btnPause.style.display = '';
+      btnStart.className = 'btn btn-accent';
+      btnStart.textContent = 'Record';
+      btnStart.title = '';
+      btnStart.disabled = false;
+      btnPause.disabled = true;
+      btnStop.disabled = true;
+      btnMark.disabled = true;
+    }
+    document.getElementById('stat-state').className = 'stat-val';
+  }
+
+  // Real-time sync progress
+  const sync = d.sync;
+  const si = document.getElementById('sync-info');
+  if (isRec && sync) {
+    si.classList.add('active');
+    document.getElementById('si-files').textContent = sync.files || 0;
+    document.getElementById('si-size').textContent = fmt(sync.bytes || 0);
+    document.getElementById('si-file').textContent = sync.filename || '--';
+  } else {
+    si.classList.remove('active');
+  }
+
+  document.getElementById('conn-dot').className = 'dot on';
+  document.getElementById('conn-text').textContent = 'Connected';
+}
+
+// ---- Sessions ----
+function updateSessions(data) {
+  const list = document.getElementById('session-list');
+  if (!data.ok) {
+    list.innerHTML = '<li style="color:var(--danger)">Error: ' + (data.error||'') + '</li>';
+    return;
+  }
+  const arr = Array.isArray(data.data) ? data.data : (data.data && data.data.sessions ? data.data.sessions : []);
+  if (!arr.length) {
+    list.innerHTML = '<li style="color:var(--text2)">No sessions</li>';
+    return;
+  }
+  list.innerHTML = arr.map(s => `
+    <li>
+      <div><div class="sid">${s.id}</div><div class="sinfo">${s.files||0} files, ${fmt(s.size||0)}</div></div>
+      <div class="btn-row">
+        <button class="btn btn-green btn-sm" onclick="syncSession('${s.id}')">Sync</button>
+        <button class="btn btn-ghost btn-sm" onclick="deleteSession('${s.id}')">Del</button>
+      </div>
+    </li>
+  `).join('');
+}
+async function refreshSessions() { updateSessions(await api('/api/sessions')); }
+async function syncSession(id) {
+  const data = await api(`/api/sync/${id}`, { method:'POST', body: JSON.stringify({session_id:id}) });
+  if (data.ok) { toast(`Synced ${data.file_count||0} files`); refreshSessions(); loadRecordings(); }
+  else toast('Sync error: ' + (data.error||''));
+}
+async function deleteSession(id) {
+  if (!confirm('Delete session ' + id + '?')) return;
+  await api(`/api/sessions/${id}`, {method:'DELETE'});
+  refreshSessions();
+  toast('Deleted');
+}
+
+// ---- Recording ----
+async function startRecording() {
+  const mode = document.getElementById('cfg-mode').value;
+  const resp = await api('/api/record/start', { method:'POST', body:JSON.stringify({mode}) });
+  toast(resp.ok ? 'Recording started' : 'Error: ' + (resp.error||''));
+  updateStatus(await api('/api/status'));
+}
+async function stopRecording() {
+  const resp = await api('/api/record/stop', {method:'POST'});
+  toast(resp.ok ? 'Stopped' : 'Error: ' + (resp.error||''));
+  updateStatus(await api('/api/status'));
+}
+async function pauseRecording() {
+  await api('/api/record/pause', {method:'POST'});
+  updateStatus(await api('/api/status'));
+}
+async function addBookmark() { await api('/api/record/bookmark', {method:'POST'}); toast('Bookmark added'); }
+
+// ---- Config ----
+async function saveConfig() {
+  for (const [key, elId] of [['mode','cfg-mode'],['noise','cfg-noise'],['dereverb','cfg-dereverb'],['autodel','cfg-autodel']]) {
+    await api('/api/config', { method:'PUT', body:JSON.stringify({key, value:document.getElementById(elId).value}) });
+  }
+  toast('Configuration saved');
+}
+
+// ---- Player ----
+async function loadRecordings() {
+  const data = await api('/api/recordings');
+  const sel = document.getElementById('player-select');
+  const prev = sel.value;
+  sel.innerHTML = '<option value="">Select recording...</option>';
+  if (!data.ok || !data.data || !data.data.length) return;
+  for (const r of data.data) {
+    const opt = document.createElement('option');
+    opt.value = r.path;
+    opt.textContent = `${r.session_id} (${fmt(r.size)})`;
+    sel.appendChild(opt);
+  }
+  if (prev) sel.value = prev;
+  document.getElementById('btn-play').disabled = !sel.value;
+}
+
+function initAudioCtx() {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+}
+function playerToggle() {
+  const sel = document.getElementById('player-select');
+  if (!sel.value) return;
+  const el = document.getElementById('audio-el');
+  if (isPlaying) {
+    el.pause(); isPlaying = false;
+    document.getElementById('btn-play').textContent = 'Play'; return;
+  }
+  if (el.src !== location.origin + '/api/play/' + sel.value) el.src = '/api/play/' + sel.value;
+  initAudioCtx();
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+  el.playbackRate = currentSpeed;
+  el.play().catch(e => console.error('Playback error:', e));
+  isPlaying = true;
+  document.getElementById('btn-play').textContent = 'Pause';
+}
+function playerSkip(sec) {
+  const el = document.getElementById('audio-el');
+  el.currentTime = Math.max(0, Math.min(el.duration||0, el.currentTime+sec));
+}
+function playerSeek(e) {
+  const el = document.getElementById('audio-el');
+  if (!el.duration) return;
+  const rect = e.currentTarget.getBoundingClientRect();
+  el.currentTime = ((e.clientX - rect.left) / rect.width) * el.duration;
+}
+function playerSpeed(rate) {
+  currentSpeed = rate;
+  document.getElementById('audio-el').playbackRate = rate;
+  document.querySelectorAll('.speed-btns button').forEach(b =>
+    b.classList.toggle('active', parseFloat(b.textContent) === rate));
+}
+function setupPlayerEvents() {
+  const el = document.getElementById('audio-el');
+  const fill = document.getElementById('player-progress-fill');
+  const timeEl = document.getElementById('player-time');
+  el.addEventListener('timeupdate', () => {
+    fill.style.width = (el.duration ? (el.currentTime/el.duration*100) : 0) + '%';
+    timeEl.textContent = fmtTime(el.currentTime) + ' / ' + fmtTime(el.duration);
+  });
+  el.addEventListener('ended', () => { isPlaying=false; document.getElementById('btn-play').textContent='Play'; });
+  document.getElementById('player-select').addEventListener('change', e => {
+    document.getElementById('btn-play').disabled = !e.target.value;
+    if (isPlaying) { el.pause(); isPlaying=false; document.getElementById('btn-play').textContent='Play'; }
+    fill.style.width='0%'; timeEl.textContent='0:00 / 0:00';
+  });
+}
+
+// ---- Audio Visualization ----
+const visBars = new Float32Array(32);
+let visDecay = 0.92;
+
+function drawVis(data) {
+  const canvas = document.getElementById('vis-canvas');
+  const ctx = canvas.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+  const w = canvas.offsetWidth, h = canvas.offsetHeight;
+  canvas.width = w * dpr; canvas.height = h * dpr;
+  ctx.scale(dpr, dpr);
+
+  ctx.fillStyle = '#e8f5e9';
+  ctx.fillRect(0, 0, w, h);
+
+  // Subtle grid
+  ctx.strokeStyle = 'rgba(0,0,0,0.04)';
+  ctx.lineWidth = 1;
+  for (let y = 0; y < h; y += 20) { ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(w,y); ctx.stroke(); }
+
+  if (!data || data.length < 7) {
+    for (let i = 0; i < visBars.length; i++) visBars[i] *= visDecay;
+  } else {
+    const vals = [];
+    for (let i = 0; i < 6; i++) { vals.push(data[i]&0x0F); vals.push((data[i]>>4)&0x0F); }
+    vals.push(data[6]&0x0F);
+    for (let i = 0; i < visBars.length; i++) {
+      const si = (i/visBars.length)*vals.length, lo = Math.floor(si), hi = Math.min(lo+1,vals.length-1), t = si-lo;
+      visBars[i] = Math.max(visBars[i]*visDecay, vals[lo]*(1-t)+vals[hi]*t);
+    }
+  }
+
+  const barCount = visBars.length, gap = 2, barW = (w - gap*(barCount-1))/barCount, maxH = h-8;
+  for (let i = 0; i < barCount; i++) {
+    const val = visBars[i]/10, barH = Math.max(2, val*maxH);
+    const x = i*(barW+gap), y = h - barH;
+    const hue = 120 - val*80; // green to yellow
+    const grad = ctx.createLinearGradient(x, y, x, h);
+    grad.addColorStop(0, `hsla(${hue},70%,55%,0.85)`);
+    grad.addColorStop(1, `hsla(${hue},70%,35%,0.5)`);
+    ctx.fillStyle = grad;
+    ctx.beginPath();
+    ctx.roundRect(x, y, barW, barH, [Math.min(barW/2,3),Math.min(barW/2,3),0,0]);
+    ctx.fill();
+  }
+
+  const maxVal = Math.max(...visBars);
+  const label = document.getElementById('vis-label');
+  if (maxVal > 1) { label.textContent='live'; label.style.color='var(--accent)'; }
+  else { label.textContent='idle'; label.style.color='var(--text2)'; }
+}
+
+let visRAF;
+function visLoop() { drawVis(null); visRAF = requestAnimationFrame(visLoop); }
+
+// ---- WebSocket ----
+function connectWS() {
+  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  ws = new WebSocket(`${proto}//${location.host}/ws`);
+  ws.onopen = () => {
+    if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+    if (!visRAF) visLoop();
+  };
+  ws.onmessage = (event) => {
+    try {
+      const msg = JSON.parse(event.data);
+      if (msg.type === 'state_update') updateStatus(msg.data);
+      else if (msg.type === 'sync_progress') {
+        // Update sync info display
+        const si = document.getElementById('sync-info');
+        si.classList.add('active');
+        document.getElementById('si-files').textContent = msg.file_count || 0;
+        document.getElementById('si-size').textContent = fmt(msg.total_size || 0);
+        document.getElementById('si-file').textContent = msg.filename || '--';
+      } else if (msg.type === 'sync_done') {
+        toast(`Sync done: ${msg.file_count} files, ${fmt(msg.total_size||0)}`);
+        loadRecordings().then(() => {
+          // Auto-select the newly synced recording in player
+          if (msg.session_id) {
+            const sel = document.getElementById('player-select');
+            for (const opt of sel.options) {
+              if (opt.textContent.startsWith(msg.session_id)) {
+                sel.value = opt.value;
+                document.getElementById('btn-play').disabled = false;
+                break;
+              }
+            }
+          }
+        });
+        updateStatus(api('/api/status'));
+      } else if (msg.type === 'sync_error') {
+        toast('Sync error: ' + msg.error);
+      } else if (msg.type === 'audio_vis') {
+        if (msg.data) {
+          let bytes;
+          if (typeof msg.data === 'string') {
+            const bin = atob(msg.data);
+            bytes = new Uint8Array(bin.length);
+            for (let i=0;i<bin.length;i++) bytes[i]=bin.charCodeAt(i);
+          } else bytes = new Uint8Array(msg.data);
+          drawVis(bytes);
+        }
+      }
+    } catch(e) { console.error('WS error:', e); }
+  };
+  ws.onclose = () => {
+    document.getElementById('conn-dot').className = 'dot off';
+    document.getElementById('conn-text').textContent = 'Disconnected';
+    if (!reconnectTimer) reconnectTimer = setTimeout(connectWS, 3000);
+  };
+}
+
+// ---- Init ----
+(async () => {
+  const status = await api('/api/status');
+  updateStatus(status);
+
+  // If device is already recording, attach to it
+  if (status.ok && status.data && status.data.state === 'RECORDING') {
+    isAttached = true;
+    const sessionId = status.data.session;
+    if (sessionId) {
+      toast('Attached to recording ' + sessionId);
+      // Start real-time sync for the existing session
+      await api('/api/record/start', { method:'POST', body: JSON.stringify({mode: status.data.mode || 'normal', attach: true, session_id: sessionId}) });
+    }
+  }
+
+  await api('/api/sessions').then(updateSessions);
+  loadRecordings();
+  setupPlayerEvents();
+  connectWS();
+})();
+</script>
+</body>
+</html>

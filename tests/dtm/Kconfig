@@ -1,0 +1,65 @@
+#
+# Copyright (c) 2024 Seeed Studio
+#
+# SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
+#
+
+mainmenu "Nordic DTM sample"
+
+config DTM_RADIO_IRQ_PRIORITY
+	int "Radio interrupt priority"
+	range 0 5 if ZERO_LATENCY_IRQS
+	range 0 6
+	default 2
+
+config DTM_TIMER_IRQ_PRIORITY
+	int "DTM timer interrupt priority"
+	range 0 5 if ZERO_LATENCY_IRQS
+	range 0 6
+	default 3
+
+config DTM_USB
+	bool "DTM over USB CDC ACM class [EXPERIMENTAL]"
+	depends on SOC_NRF5340_CPUNET && !DTM_TRANSPORT_HCI
+	select EXPERIMENTAL
+
+config DTM_TRANSPORT_HCI
+	bool "DTM over HCI UART [EXPERIMENTAL]"
+	depends on SERIAL
+	depends on NET_BUF
+	select EXPERIMENTAL
+
+if DTM_TRANSPORT_HCI
+
+config DTM_HCI_QUEUE_COUNT
+	int "Count of HCI RX/TX queues"
+	default 16
+
+config DTM_HCI_QUEUE_SIZE
+	int "Size of HCI RX/TX queue buffer"
+	default 1024
+
+config DTM_HCI_TX_THREAD_STACK_SIZE
+	int "Stack size of TX thread"
+	default 2048
+
+config DTM_HCI_TX_THREAD_PRIORITY
+	int "TX thread priority"
+	default 7
+
+endif
+
+config DTM_POWER_CONTROL_AUTOMATIC
+	bool "Automatic power control"
+	depends on FEM
+	default y
+
+config DTM_FAST_RAMP_UP
+	bool "Enable radio fast ramp up mode"
+	default y
+
+module = DTM_TRANSPORT
+module-str = "DTM_transport"
+source "$(ZEPHYR_BASE)/subsys/logging/Kconfig.template.log_config"
+
+source "Kconfig.zephyr"

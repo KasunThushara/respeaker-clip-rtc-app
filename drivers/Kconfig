@@ -1,0 +1,6 @@
+# SPDX-License-Identifier: Apache-2.0
+
+# reSpeaker Lav custom drivers configuration
+
+rsource "input/Kconfig"
+rsource "display/Kconfig"

@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>reSpeaker Clip File Browser</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f5f5f5;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container { max-width: 800px; margin: 0 auto; }
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
+        .header h1 { font-size: 24px; margin-bottom: 15px; }
+        .connect-form { display: flex; gap: 10px; }
+        .connect-form input {
+            flex: 1;
+            padding: 10px 15px;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+        }
+        .connect-form button {
+            padding: 10px 25px;
+            background: rgba(255,255,255,0.2);
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        .connect-form button:hover { background: rgba(255,255,255,0.3); }
+        .breadcrumb {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        .breadcrumb a { color: #667eea; text-decoration: none; }
+        .breadcrumb a:hover { text-decoration: underline; }
+        .breadcrumb span { color: #666; }
+        .file-list {
+            background: white;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        .file-item {
+            display: flex;
+            align-items: center;
+            padding: 12px 15px;
+            border-bottom: 1px solid #eee;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .file-item:hover { background: #f8f9fa; }
+        .file-item:last-child { border-bottom: none; }
+        .file-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 15px;
+            font-size: 20px;
+        }
+        .file-icon.dir { background: #e3f2fd; }
+        .file-icon.file { background: #f3e5f5; }
+        .file-info { flex: 1; }
+        .file-name { font-weight: 500; color: #333; word-break: break-all; }
+        .file-size { font-size: 12px; color: #888; margin-top: 3px; }
+        .pagination {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 10px;
+            padding: 20px;
+            background: white;
+            border-radius: 8px;
+            margin-top: 15px;
+        }
+        .pagination button {
+            padding: 8px 16px;
+            border: 1px solid #ddd;
+            background: white;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        .pagination button:hover:not(:disabled) { background: #f5f5f5; }
+        .pagination button:disabled { opacity: 0.5; cursor: not-allowed; }
+        .pagination span { color: #666; }
+        .status {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+        .error {
+            background: #ffebee;
+            color: #c62828;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+        }
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+        .stats {
+            font-size: 13px;
+            color: #888;
+            padding: 10px 15px;
+            background: #f8f9fa;
+            border-bottom: 1px solid #eee;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>reSpeaker Clip File Browser</h1>
+            <div class="connect-form">
+                <input type="text" id="ipInput" placeholder="Enter IP address (e.g., 192.168.4.1)" value="192.168.4.1">
+                <button onclick="connect()">Connect</button>
+            </div>
+        </div>
+
+        <div id="errorBox" class="error" style="display:none;"></div>
+
+        <div id="breadcrumb" class="breadcrumb" style="display:none;"></div>
+
+        <div id="fileList" class="file-list">
+            <div class="status">Enter IP address and click Connect</div>
+        </div>
+
+        <div id="pagination" class="pagination" style="display:none;">
+            <button id="prevBtn" onclick="prevPage()">Previous</button>
+            <span id="pageInfo"></span>
+            <button id="nextBtn" onclick="nextPage()">Next</button>
+        </div>
+    </div>
+
+    <script>
+        let baseUrl = '';
+        let currentPath = '/';
+        let currentPage = 1;
+        let limit = 20;
+        let hasMore = false;
+
+        function showError(msg) {
+            const box = document.getElementById('errorBox');
+            box.textContent = msg;
+            box.style.display = 'block';
+        }
+
+        function hideError() {
+            document.getElementById('errorBox').style.display = 'none';
+        }
+
+        function formatSize(bytes) {
+            if (bytes === 0) return '0 B';
+            const k = 1024;
+            const sizes = ['B', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+        }
+
+        function connect() {
+            const ip = document.getElementById('ipInput').value.trim();
+            if (!ip) {
+                showError('Please enter IP address');
+                return;
+            }
+            baseUrl = 'http://' + ip;
+            currentPath = '/';
+            currentPage = 1;
+            hideError();
+            loadFiles();
+        }
+
+        function loadFiles() {
+            if (!baseUrl) return;
+
+            const listEl = document.getElementById('fileList');
+            listEl.innerHTML = '<div class="loading">Loading...</div>';
+            document.getElementById('pagination').style.display = 'none';
+
+            const url = baseUrl + '/files' + currentPath + '?page=' + currentPage + '&limit=' + limit;
+
+            fetch(url)
+                .then(res => {
+                    if (!res.ok) throw new Error('HTTP ' + res.status);
+                    return res.json();
+                })
+                .then(data => {
+                    hasMore = data.has_more || false;
+                    renderBreadcrumb();
+                    renderFiles(data);
+                    renderPagination(data);
+                })
+                .catch(err => {
+                    listEl.innerHTML = '<div class="error">Failed to load: ' + err.message + '</div>';
+                });
+        }
+
+        function renderBreadcrumb() {
+            const el = document.getElementById('breadcrumb');
+            el.style.display = 'flex';
+
+            let html = '<a href="#" onclick="goToPath(\'/\'); return false;">Home</a>';
+            const parts = currentPath.split('/').filter(p => p);
+
+            let acc = '';
+            parts.forEach(part => {
+                acc += '/' + part;
+                const path = acc;
+                html += '<span>/</span><a href="#" onclick="goToPath(\'' + path + '\'); return false;">' + part + '</a>';
+            });
+
+            el.innerHTML = html;
+        }
+
+        function renderFiles(data) {
+            const listEl = document.getElementById('fileList');
+
+            if (!data.files || data.files.length === 0) {
+                listEl.innerHTML = '<div class="status">Empty directory</div>';
+                return;
+            }
+
+            // Stats bar
+            let html = '<div class="stats">Page ' + data.page + (data.has_more ? ' (more available)' : ' (last page)') + '</div>';
+
+            data.files.forEach(file => {
+                const isDir = file.type === 'dir';
+                const icon = isDir ? '📁' : '📄';
+                const sizeStr = isDir ? '' : formatSize(file.size);
+                const clickAction = isDir
+                    ? 'onclick="enterDir(\'' + encodeURIComponent(file.name) + '\')"'
+                    : 'onclick="downloadFile(\'' + encodeURIComponent(file.name) + '\')"';
+
+                html += '<div class="file-item" ' + clickAction + '>' +
+                    '<div class="file-icon ' + (isDir ? 'dir' : 'file') + '">' + icon + '</div>' +
+                    '<div class="file-info">' +
+                    '<div class="file-name">' + file.name + '</div>' +
+                    (sizeStr ? '<div class="file-size">' + sizeStr + '</div>' : '') +
+                    '</div></div>';
+            });
+
+            listEl.innerHTML = html;
+        }
+
+        function renderPagination(data) {
+            const el = document.getElementById('pagination');
+            el.style.display = 'flex';
+
+            document.getElementById('prevBtn').disabled = data.page <= 1;
+            document.getElementById('nextBtn').disabled = !data.has_more;
+            document.getElementById('pageInfo').textContent = 'Page ' + data.page;
+        }
+
+        function enterDir(name) {
+            currentPath = currentPath === '/' ? '/' + name : currentPath + '/' + name;
+            currentPage = 1;
+            loadFiles();
+        }
+
+        function goToPath(path) {
+            currentPath = path;
+            currentPage = 1;
+            loadFiles();
+        }
+
+        function downloadFile(name) {
+            const filePath = currentPath === '/' ? '/' + name : currentPath + '/' + name;
+            window.open(baseUrl + '/files' + filePath, '_blank');
+        }
+
+        function prevPage() {
+            if (currentPage > 1) {
+                currentPage--;
+                loadFiles();
+            }
+        }
+
+        function nextPage() {
+            if (hasMore) {
+                currentPage++;
+                loadFiles();
+            }
+        }
+
+        // Handle Enter key in IP input
+        document.getElementById('ipInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') connect();
+        });
+    </script>
+</body>
+</html>

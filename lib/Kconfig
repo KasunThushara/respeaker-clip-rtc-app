@@ -1,0 +1,8 @@
+# SPDX-License-Identifier: Apache-2.0
+
+# reSpeaker Lav custom libraries configuration
+
+rsource "opus/Kconfig"
+rsource "speexdsp/Kconfig"
+rsource "lua/Kconfig"
+rsource "clip_usb_dfu/Kconfig"

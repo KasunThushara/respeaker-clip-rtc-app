@@ -1,0 +1,23 @@
+diff --git a/boot/zephyr/io.c b/boot/zephyr/io.c
+index 3cdbf4df..60b489d2 100644
+--- a/boot/zephyr/io.c
++++ b/boot/zephyr/io.c
+@@ -166,6 +166,18 @@ bool io_detect_pin(void)
+         }
+     }
+ 
++#if defined(CONFIG_SOC_NRF5340_CPUAPP)
++    /* reSpeaker Clip patch: require USB VBUS to be present before entering serial recovery
++     * via GPIO. The button doubles as an 8-second hardware reset; without this guard,
++     * every button-reset would trigger DFU. With USB connected = intentional DFU entry. */
++    if (pin_active) {
++        if (!(NRF_USBREGULATOR_S->USBREGSTATUS & USBREG_USBREGSTATUS_VBUSDETECT_Msk)) {
++            printk("[MCUboot] Button pressed but USB not connected, skipping serial recovery\n");
++            pin_active = 0;
++        }
++    }
++#endif
++
+     return (bool)pin_active;
+ }
+ #endif

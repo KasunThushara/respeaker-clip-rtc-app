@@ -1,0 +1,34 @@
+# SPDX-License-Identifier: Apache-2.0
+
+config CLIP_USB_DFU
+	bool "reSpeaker Clip: 1200-baud USB CDC -> mcuboot DFU trigger"
+	select REBOOT
+	select UART_LINE_CTRL
+	select RETAINED_MEM
+	select RETENTION
+	select RETENTION_BOOT_MODE
+	help
+	  Standard "open the CDC ACM port at 1200 baud -> reboot into the
+	  bootloader" DFU-entry pattern (Arduino/Adafruit/UF2 style). When the
+	  host sets the CDC ACM line coding to 1200 baud, the mcuboot boot-mode
+	  retention register is set and the device reboots into mcuboot serial
+	  recovery (DFU). mcuboot itself does not detect 1200 baud; this is the
+	  app-side trigger that drives the existing bootmode_set + recovery flow.
+
+	  Provides clip_usb_dfu_check() for apps that bring their own USB CDC
+	  (the clip app, whose USB is BLE-gated). Apps without a USB stack also
+	  enable CLIP_USB_DFU_DEFAULT_CDC to get a minimal auto-enabled CDC.
+
+config CLIP_USB_DFU_DEFAULT_CDC
+	bool "Default auto-enabled USB CDC ACM for the DFU trigger"
+	default y
+	depends on CLIP_USB_DFU
+	select USB_DEVICE_STACK_NEXT
+	select USBD_CDC_ACM_CLASS
+	help
+	  Adds a minimal CDC ACM interface (Seeed VID) that is auto-initialized
+	  and enabled via SYS_INIT, Arduino-style, so apps without their own USB
+	  stack (e.g. samples like hello_world) get the 1200-baud DFU trigger
+	  with zero code. Apps that bring their own CDC (the clip app, whose USB
+	  is BLE-gated via AT+USB=on) set this to n and call clip_usb_dfu_check()
+	  from their own USB message callback.

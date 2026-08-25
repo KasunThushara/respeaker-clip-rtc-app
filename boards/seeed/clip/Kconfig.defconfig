@@ -1,0 +1,67 @@
+if  BOARD_CLIP_NRF5340_CPUAPP || BOARD_CLIP_NRF5340_CPUAPP_NS
+
+# Code Partition:
+#
+# For the secure version of the board the firmware is linked at the beginning
+# of the flash, or into the code-partition defined in DT if it is intended to
+# be loaded by MCUboot. If the secure firmware is to be combined with a non-
+# secure image (TRUSTED_EXECUTION_SECURE=y), the secure FW image shall always
+# be restricted to the size of its code partition.
+#
+# For the non-secure version of the board, the firmware
+# must be linked into the code-partition (non-secure) defined in DT, regardless.
+# Apply this configuration below by setting the Kconfig symbols used by
+# the linker according to the information extracted from DT partitions.
+
+# SRAM Partition:
+#
+# If the secure firmware is to be combined with a non-secure image
+# (TRUSTED_EXECUTION_SECURE=y), the secure FW image SRAM shall always
+# be restricted to the secure image SRAM partition (sram-secure-partition).
+# Otherwise (if TRUSTED_EXECUTION_SECURE is not set) the whole zephyr,sram
+# may be used by the image.
+#
+# For the non-secure version of the board, the firmware image SRAM is
+# always restricted to the allocated non-secure SRAM partition.
+#
+
+if BOARD_CLIP_NRF5340_CPUAPP && TRUSTED_EXECUTION_SECURE
+
+# Workaround for not being able to have commas in macro arguments
+DT_CHOSEN_Z_SRAM_PARTITION := zephyr,sram-secure-partition
+
+config SRAM_SIZE
+	default $(dt_chosen_reg_size_int,$(DT_CHOSEN_Z_SRAM_PARTITION),0,K)
+
+endif # BOARD_CLIP_NRF5340_CPUAPP && TRUSTED_EXECUTION_SECURE
+
+config BOARD_CLIP
+	select USE_DT_CODE_PARTITION if BOARD_CLIP_NRF5340_CPUAPP_NS
+
+config BT_HCI_IPC
+	default y if BT
+
+config HEAP_MEM_POOL_ADD_SIZE_BOARD
+	int
+	default 4096 if BT_HCI_IPC
+
+# 1200-baud USB CDC -> mcuboot DFU trigger is on only for images that actually
+# run under mcuboot (the clip app + samples) -- BOOTLOADER_MCUBOOT is y for the
+# app and false for both the mcuboot image itself (MCUBOOT=y, it IS the
+# bootloader) and the test firmware (tests opt out of mcuboot via
+# SB_CONFIG_BOOTLOADER_NONE, so they have no serial recovery to trigger and no
+# CDC ACM DTS node either). Gating on BOOTLOADER_MCUBOOT (not !MCUBOOT) keeps
+# the tests from being forced to y-select USBD_CDC_ACM_CLASS without its deps.
+config CLIP_USB_DFU
+	bool
+	default y if BOOTLOADER_MCUBOOT
+
+# The UDC (USB device controller) driver thread handles host enumeration. With
+# the default CDC auto-enabled, samples that use LOG_MODE_IMMEDIATE overflow
+# the stock 512-byte UDC thread stack during enumeration. Bump it for apps
+# that pull in the default CDC (clip keeps 512; it uses deferred LOG + its
+# own CDC).
+config UDC_NRF_THREAD_STACK_SIZE
+	default 1024 if CLIP_USB_DFU_DEFAULT_CDC
+
+endif #  BOARD_CLIP_NRF5340_CPUAPP || BOARD_CLIP_NRF5340_CPUAPP_NS

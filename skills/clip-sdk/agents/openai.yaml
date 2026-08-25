@@ -1,0 +1,4 @@
+interface:
+  display_name: "Clip SDK Development"
+  short_description: "Maintain the reSpeaker Clip Python SDK and tools."
+  default_prompt: "Use $clip-sdk to update, test, package, or debug the reSpeaker Clip Python SDK."

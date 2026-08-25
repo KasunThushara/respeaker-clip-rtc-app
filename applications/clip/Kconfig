@@ -1,0 +1,470 @@
+#
+# Copyright (c) 2025 Seeed Technology Co., Ltd.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+source "Kconfig.zephyr"
+
+# Main application
+menuconfig CLIP
+	bool "Clip Application"
+	default y
+
+if CLIP
+
+module = CLIP
+module-str = Clip Application
+source "subsys/logging/Kconfig.template.log_config"
+
+# =============================================================================
+# Configuration Defaults
+# =============================================================================
+
+config CLIP_NORMAL_BITRATE
+	int "Normal mode Opus bitrate (bps)"
+	default 32000
+
+config CLIP_NORMAL_COMPLEXITY
+	int "Normal mode Opus complexity (0-10)"
+	range 0 10
+	default 1
+
+config CLIP_ENHANCED_BITRATE
+	int "Enhanced mode Opus bitrate (bps)"
+	default 32000
+
+config CLIP_ENHANCED_COMPLEXITY
+	int "Enhanced mode Opus complexity (0-10)"
+	range 0 10
+	default 1
+
+config CLIP_DEFAULT_NOISE
+	int "Default noise suppression level (dB)"
+	default 12
+
+config CLIP_DEFAULT_DEREVERB
+	bool "Default dereverberation enabled"
+	default y
+
+config CLIP_AGC_MAX_GAIN
+	int "AGC maximum gain (dB)"
+	default 60
+
+config CLIP_AGC_TARGET
+	int "AGC target level"
+	default 30000
+
+config CLIP_AGC_INCREMENT
+	int "AGC max increase (dB/s)"
+	default 60
+
+config CLIP_AGC_DECREMENT
+	int "AGC max decrease (dB/s)"
+	default -100
+
+config CLIP_STORAGE_FULL_PERCENT
+	int "SD usage percent at which recording is refused (storage full)"
+	default 95
+	range 50 99
+	help
+	  Recording is refused and a "Storage Full" error is shown when SD card
+	  usage reaches this percentage (e.g. 95 = refuse at 95% full).
+
+config CLIP_LOG_FS_DEFAULT_ON
+	bool "Enable FS (SD card) log backend by default at boot"
+	default y if LOG_BACKEND_UART
+	help
+	  FS log default follows the UART log backend: debug builds (which keep
+	  UART logging) default FS log on (INF to /SD:/LOG); the production
+	  snippet disables UART logging, so FS log defaults off there. The FS
+	  log can still be toggled at runtime with AT+LOG=off|info|debug.
+	  Coupling to LOG_BACKEND_UART (rather than overriding this symbol from
+	  the production snippet) avoids broadcasting an app-only Kconfig symbol
+	  into the mcuboot sysbuild image, where it is undefined.
+
+config CLIP_DEFAULT_AUTODEL
+	int "Default auto-delete days (-1 for off)"
+	default -1
+
+config CLIP_DEFAULT_BRIGHTNESS
+	int "Default OLED brightness (0-255)"
+	default 32
+
+config CLIP_DISPLAY_STATUS_TIMEOUT_MS
+	int "Status bar display timeout (ms)"
+	default 10000
+
+config CLIP_DISPLAY_PAIRING_TIMEOUT_MS
+	int "Pairing guide display timeout (ms)"
+	default 60000
+
+config CLIP_SETTINGS_LOAD_TIMEOUT_MS
+	int "settings_load watchdog timeout (ms)"
+	default 3000
+
+config CLIP_SD_IDLE_DELAY_MS
+	int "SD card idle power-off delay (ms)"
+	default 45000
+
+config CLIP_ADV_FAST_TIMEOUT_MS
+	int "BLE fast advertising timeout before dropping to slow (ms)"
+	default 30000
+
+config CLIP_WIFI_AP_CHANNEL
+	int "Default WiFi AP channel (5GHz: 36-165)"
+	default 36
+
+config CLIP_WIFI_AP_REG_DOMAIN
+	string "Default WiFi regulatory domain (2-letter country code)"
+	default "US"
+
+# =============================================================================
+# Hardware Configuration (crystal caps, low-battery boot gate)
+# =============================================================================
+
+config CLIP_HFXO_CAPVALUE
+	int "HFXO (32 MHz) crystal capacitance (raw XOSC32MCAPS.CAPVALUE)"
+	default 60
+	help
+	  Raw CAPVALUE register field for the 32 MHz crystal internal load caps.
+	  Set by clip_xo_cap_init() (SYS_INIT POST_KERNEL) — the HFXO DTS binding
+	  can't take a raw CAPVALUE (it derives from FICR), so we override here.
+	  Tune with the tests/clip "hfxo set" shell, then set here.
+
+config CLIP_LFXO_INTCAP
+	int "LFXO (32.768 kHz) internal capacitance (0=ext, 1=6pF, 2=7pF, 3=9pF)"
+	range 0 3
+	default 1
+	help
+	  INTCAP for the 32.768 kHz crystal (XOSC32KI.INTCAP). 0 = external caps,
+	  1 = 6 pF, 2 = 7 pF, 3 = 9 pF internal. Set by clip_xo_cap_init().
+
+# =============================================================================
+# Button Configuration
+# =============================================================================
+
+# =============================================================================
+# Haptic Motor Configuration
+# =============================================================================
+
+config CLIP_HAPTIC_MOTOR_ENABLED
+	bool "Enable haptic motor"
+	default n
+
+config CLIP_HAPTIC_MOTOR_GPIO_PIN
+	int "Haptic motor GPIO pin"
+	default 6
+
+# =============================================================================
+# AT Server Configuration
+# =============================================================================
+
+config CLIP_AT_SERVER_QUEUE_SIZE
+	int "AT command queue size"
+	default 10
+
+config CLIP_AT_SERVER_STACK_SIZE
+	int "AT server thread stack size"
+	default 4096
+
+config CLIP_AT_SERVER_PRIORITY
+	int "AT server thread priority"
+	default 7
+
+config CLIP_AT_MAX_CMD_LEN
+	int "Maximum AT command length"
+	default 256
+
+config CLIP_AT_MAX_RESPONSE_LEN
+	int "Maximum AT response length"
+	default 1024
+
+# =============================================================================
+# Audio Configuration
+# =============================================================================
+
+config CLIP_AUDIO_STACK_SIZE
+	int "Audio thread stack size"
+	default 32768
+
+config CLIP_AUDIO_THREAD_PRIORITY
+	int "Audio thread priority"
+	default 0
+
+config CLIP_AUDIO_ENABLED
+	bool "Enable audio recording"
+	default y
+
+config CLIP_AUDIO_DMIC_FLUSH_FRAMES
+	int "Number of DMIC frames to discard on start/resume"
+	range 0 20
+	default 4
+	help
+	  Number of 20ms DMIC frames to discard after mic power-on
+	  to eliminate pop/click from power-up transients.
+
+# =============================================================================
+# Storage Configuration
+# =============================================================================
+
+config CLIP_STORAGE_ENABLED
+	bool "Enable SD card storage"
+	default y
+
+config CLIP_STORAGE_MAX_SESSIONS
+	int "Maximum number of sessions to list"
+	default 100
+
+config CLIP_STORAGE_SESSIONS_PER_PAGE
+	int "Sessions per page for LIST command"
+	default 20
+
+config CLIP_STORAGE_MAX_CHUNKS
+	int "Maximum chunks per session"
+	default 9999
+
+config CLIP_STORAGE_CHUNK_SIZE
+	int "Storage chunk buffer size (bytes)"
+	default 4096
+
+config CLIP_STORAGE_FILES_PER_GROUP
+	int "Number of files per group subdirectory"
+	default 100
+	help
+	  Maximum number of audio files stored in each group subdirectory.
+	  When a session has many files, they are organized into
+	  subdirectories (0, 1, 2...) to maintain FAT filesystem performance.
+	  Group = (file_index - 1) / FILES_PER_GROUP.
+
+# =============================================================================
+# Audio Segment Configuration
+# =============================================================================
+
+config CLIP_AUDIO_SEGMENT_DURATION_SYNC
+	int "Audio segment duration during sync (seconds)"
+	range 10 600
+	default 60
+
+config CLIP_AUDIO_SEGMENT_DURATION_NO_SYNC
+	int "Audio segment duration without sync (seconds)"
+	range 20 3600
+	default 300
+
+# =============================================================================
+# Transfer Configuration
+# =============================================================================
+
+config CLIP_TRANSFER_ENABLED
+	bool "Enable file transfer"
+	default y
+
+config CLIP_TRANSFER_STACK_SIZE
+	int "Transfer thread stack size"
+	default 16384
+
+config CLIP_TRANSFER_THREAD_PRIORITY
+	int "Transfer thread priority"
+	default 5
+
+config CLIP_TRANSFER_CHUNK_SIZE
+	int "Transfer chunk size (bytes)"
+	default 4096
+	help
+	  Data chunk size for file transfer. Transport layer slices into
+	  multiple frames as needed (UDP max frame is 1024 bytes).
+	  BLE transport will split into multiple notifications automatically.
+
+# =============================================================================
+# RTC Streaming Configuration
+# =============================================================================
+
+config CLIP_RTC_QUEUE_FRAMES
+	int "RTC stream queue depth (20ms Opus frames)"
+	default 32
+	range 8 128
+	help
+	  Number of encoded frames the RTC queue can buffer. When full
+	  (consumer not started or BLE too slow) the oldest frame is
+	  dropped — RTC favors low latency over completeness.
+	  32 frames = 640 ms at 20 ms/frame.
+
+config CLIP_RTC_FRAME_MAX_BYTES
+	int "RTC queue slot size (bytes)"
+	default 384
+	range 128 1024
+	help
+	  Maximum encoded frame size stored per RTC queue slot. Opus at
+	  32 kbps/20 ms averages ~80 bytes; VBR peaks stay well below this.
+	  Frames exceeding the slot are dropped.
+
+config CLIP_RTC_START_TIMEOUT_SEC
+	int "RTC start timeout (seconds)"
+	default 5
+	range 1 300
+	help
+	  If AT+DOWNLOAD does not start the stream within this time after
+	  AT+START=RTC, the RTC session is aborted.
+
+config CLIP_RTC_STACK_SIZE
+	int "RTC stream thread stack size"
+	default 2048
+
+config CLIP_RTC_THREAD_PRIORITY
+	int "RTC stream thread priority"
+	default 4
+
+# =============================================================================
+# UDP Transport Configuration
+# =============================================================================
+
+config CLIP_UDP_THREAD_STACK_SIZE
+	int "UDP server thread stack size"
+	default 4096
+
+config CLIP_UDP_THREAD_PRIORITY
+	int "UDP server thread priority"
+	default 5
+
+config CLIP_UDP_RECV_BUF_SIZE
+	int "UDP receive buffer size"
+	default 2048
+
+config CLIP_UDP_SOCKET_BUF_SIZE
+	int "UDP socket SO_RCVBUF/SO_SNDBUF size"
+	default 4096
+
+config CLIP_UDP_MAX_DATA_SIZE
+	int "UDP maximum data per packet"
+	default 1024
+
+config CLIP_UDP_HEARTBEAT_INTERVAL_MS
+	int "UDP heartbeat interval (ms)"
+	default 5000
+
+config CLIP_UDP_CONNECTION_TIMEOUT_MS
+	int "UDP connection timeout (ms)"
+	default 30000
+
+config CLIP_UDP_SEND_BACKOFF_US
+	int "UDP send-error backoff (us), 0 to disable"
+	default 1000
+	help
+	  Delay after a UDP sendto failure before the next frame. Only fires on an
+	  actual send error (the socket is blocking, so this is rare), as a brief
+	  drain window. 0 disables.
+
+config CLIP_UDP_FILE_END_DELAY_US
+	int "UDP delay before FILE_END (us), 0 to disable"
+	default 5000
+	help
+	  Pause after the last DATA frame and before sending FILE_END. UDP is
+	  unordered, so FILE_END sent right after the last DATA can overtake it
+	  and make the client compute the file CRC before all DATA arrives (NACK).
+	  Lets in-flight DATA land first. 0 disables.
+
+config CLIP_UDP_REPAIR_PACE_US
+	int "UDP inter-frame pace during retransmit (us), 0 to disable"
+	default 1000
+	help
+	  Delay between retransmitted DATA frames when repairing a NACKed file
+	  (selective repeat OR whole-file). The link just dropped frames, so pacing
+	  the retransmit avoids re-overwhelming it. Halves each repair round (递减)
+	  toward full speed as the file converges; the next file's initial send is
+	  always full speed. 0 disables.
+
+config CLIP_UDP_NACK_BACKOFF_MS
+	int "UDP backoff between NACK retry rounds (ms)"
+	default 10
+	help
+	  Delay before each NACK retransmit round, multiplied by the retry number
+	  (10 ms, 20 ms, 30 ms ...). Lets the WiFi channel settle before resending.
+	  Was 50; lowered — the heartbeat keep-alive makes the link stable, so a
+	  long backoff just slows recovery.
+
+# =============================================================================
+# WiFi Configuration
+# =============================================================================
+
+config CLIP_WIFI_TIMEOUT_MS
+	int "WiFi AP auto-off timeout (ms), 0 to disable"
+	default 180000
+	help
+	  Time in milliseconds before WiFi AP is automatically disabled.
+	  Timer starts after AP is enabled, restarts on client disconnect.
+	  Set to 0 to disable auto-off.
+
+config COEX_SEP_ANTENNAS
+	bool "WiFi and BLE use separate antennas"
+	default n
+
+config SR_PROTOCOL_BLE
+	bool "Short Range protocol is Bluetooth LE"
+	default y
+	help
+	  Tells the WiFi/BLE coexistence PTA that the short-range
+	  protocol is BLE, enabling proper radio arbitration.
+
+# =============================================================================
+# Battery / Fuel-Gauge Configuration
+# =============================================================================
+
+config CLIP_BATTERY_WIFI_LOAD_COMPENSATION
+	bool "Compensate fuel gauge for WiFi (nRF70) current the NPM1300 IBAT cannot see"
+	default y
+	help
+	  The nRF7002 main VDD (BUCKVBAT) is tied to VBAT upstream of the NPM1300,
+	  so its radio TX/RX/internal-buck current never flows through the PMIC's
+	  IBAT sense resistor. GAUGE_AVG_CURRENT therefore undercounts discharge
+	  (and over-counts charge while charging) whenever WiFi is on, so the fuel
+	  gauge SoC reads high. Fold a state-keyed WiFi-load estimate into the
+	  current fed to nrf_fuel_gauge_process() to cancel the blind spot, in both
+	  charge and discharge states. Disable only for an uncompensated baseline.
+
+config CLIP_BATTERY_WIFI_AP_LOAD_MA
+	int "Estimated unseen nRF70 current with AP up, no transfer (mA)"
+	default 59
+	help
+	  Estimated nRF7002 current (mA) drawn from VBAT-direct while the WiFi AP
+	  is up but no file transfer is active. Added to the discharge side of the
+	  fuel-gauge current. Calibrate by measuring total battery current (PPK on
+	  the VBAT rail, upstream of the NPM1300) and the NPM1300 IBAT logged at
+	  state transitions: unseen = total - |IBAT|. Default is an upper bound
+	  (total - WiFi-off baseline); over-compensating is safer than under-.
+	  Trim to (total - |IBAT|) once IBAT is measured.
+
+config CLIP_BATTERY_WIFI_TX_LOAD_MA
+	int "Estimated unseen nRF70 current during active UDP transfer (mA)"
+	default 99
+	help
+	  Estimated nRF7002 current (mA) drawn from VBAT-direct while a WiFi UDP
+	  file transfer is active (AP up + transfer). See CLIP_BATTERY_WIFI_AP_LOAD_MA
+	  for the calibration method. Default is an upper bound; trim to (total - |IBAT|).
+
+config CLIP_BATTERY_DISPLAY_MAX_STEP
+	int "Max displayed SoC change per poll (%)"
+	default 3
+	help
+	  Rate-limits the DISPLAYED state-of-charge toward the fuel-gauge value,
+	  DIRECTIONALLY, polled every 60 s: while charging the display only moves
+	  UP toward the gauge (catch up + track the charge); while discharging it
+	  only moves DOWN (track depletion). A normal charge/discharge changes by
+	  <= MAX_STEP per poll, so the display tracks it with ZERO lag. The gauge's
+	  voltage-reconciliation up-correction (the ~5-15% first-reboot jump after
+	  charge/discharge cycling) is therefore held while discharging (no upward
+	  creep on a discharging battery) and only corrected on the next charge.
+	  Set 0 to disable smoothing (display the raw gauge SoC directly). The
+	  displayed value is persisted across reboot so it resumes from the value
+	  shown before reboot (no cross-reboot lag accumulation).
+
+# =============================================================================
+# Debug Configuration
+# =============================================================================
+
+config CLIP_DEBUG_STATS
+	bool "Enable periodic thread stack and heap usage logging"
+	default n
+	help
+	  Print thread stack usage and heap stats every 10 seconds.
+
+endif # CLIP

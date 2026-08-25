@@ -1,0 +1,4 @@
+name: production
+append:
+  EXTRA_CONF_FILE: snippet-production.conf
+  EXTRA_DTC_OVERLAY_FILE: snippet-production.overlay

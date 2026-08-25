@@ -1,0 +1,107 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+/*
+ * MCUboot device tree overlay
+ *
+ * Disable unnecessary devices for MCUboot to reduce boot power consumption.
+ * Keep: SPI3 (external flash), I2C2 + CH1115 (OLED), I2C1 + NPM1300, USB CDC.
+ */
+
+/ {
+	chosen {
+		nordic,pm-ext-flash = &spi_flash;
+		zephyr,boot-mode = &boot_mode0;
+		zephyr,uart-mcumgr = &cdc_acm_uart0;
+	};
+	aliases {
+		mcuboot-button0 = &usr_btn;
+	};
+};
+
+&uart0 {
+	status = "disabled";
+};
+
+&gpregret1 {
+	boot_mode0: boot_mode@0 {
+		compatible = "zephyr,retention";
+		status = "okay";
+		reg = <0x0 0x1>;
+	};
+};
+
+&usbd {
+	status = "okay";
+	cdc_acm_uart0: cdc_acm_uart0 {
+		compatible = "zephyr,cdc-acm-uart";
+	};
+};
+
+/* I2C1 + NPM1300 for motor haptic and SD card power */
+&i2c1 {
+	status = "okay";
+	/delete-property/ zephyr,pm-device-runtime-auto;
+};
+&npm1300 {
+	status = "okay";
+};
+&npm1300_regulators {
+	status = "okay";
+};
+&npm1300_buck1 {
+	status = "okay";
+};
+&npm1300_gpio {
+	status = "okay";  /* GPIO3 controls LDO2 / SD card power */
+};
+&npm1300_buck2 {
+	status = "disabled";
+};
+&npm1300_ldo1 {
+	status = "disabled";
+};
+&npm1300_ldo2 {
+	status = "okay";
+};
+&npm1300_charger {
+	status = "disabled";
+};
+
+/* SPI4 + SDHC for SD card erase in recovery mode */
+&spi4 {
+	status = "okay";
+	/delete-property/ zephyr,pm-device-runtime-auto;
+};
+&sdhc0 {
+	status = "okay";
+};
+
+/* Disable QSPI WiFi */
+&qspi {
+	status = "disabled";
+};
+&nrf70 {
+	status = "disabled";
+};
+
+/* Disable PDM */
+&pdm0 {
+	status = "disabled";
+};
+
+/* Disable ADC */
+&adc {
+	status = "disabled";
+};
+
+/* GPIO regulators */
+&oled_reg {
+	status = "okay";
+};
+&rfsw_reg {
+	status = "disabled";
+};
+
+/* External SPI flash power — needed for erase-settings */
+&flash_vdd {
+	status = "okay";
+};
